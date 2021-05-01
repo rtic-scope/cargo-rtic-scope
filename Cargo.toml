@@ -1,0 +1,18 @@
+[package]
+name = "rtic-trace"
+version = "0.1.0"
+authors = ["Viktor Sonesten <v@tmplt.dev>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cortex-m = "0.7"
+rtic-trace-macros = { path = "macros" }
+
+[dependencies.stm32f4]
+version = "0.13"
+features = ["stm32f401"]
+
+[workspace]
+members = [ "macros" ]
