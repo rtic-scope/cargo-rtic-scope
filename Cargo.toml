@@ -16,3 +16,6 @@ features = ["stm32f401"]
 
 [workspace]
 members = [ "macros" ]
+
+[patch.crates-io]
+cortex-m = { path = "../../cortex-m" }
