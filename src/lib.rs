@@ -1,10 +1,67 @@
 #![no_std]
+//! A crate that enables childishly simple tracing of software and
+//! hardware tasks of `cortex-m-rtic` applications.
+//!
+//! TODO explain how it works
+//!
+//! Example usage:
+//!
+//! ```
+//! #[app(device = stm32f4::stm32f401, peripherals = true, dispatchers = [EXTI1])]
+//! mod app {
+//!     use cortex_m::asm;
+//!     use rtic_trace::{self, trace};
+//!     use stm32f4::stm32f401::Interrupt;
+//!
+//!     #[init]
+//!     fn init(mut ctx: init::Context) -> (init::LateResources, init::Monotonics) {
+//!         rtic_trace::setup::core_peripherals(
+//!             &mut ctx.core.DCB,
+//!             &mut ctx.core.TPIU,
+//!             &mut ctx.core.DWT,
+//!             &mut ctx.core.ITM,
+//!         );
+//!         rtic_trace::setup::device_peripherals(&mut ctx.device.DBGMCU);
+//!         rtic_trace::setup::assign_dwt_unit(&ctx.core.DWT.c[1]);
+//!
+//!         rtic::pend(Interrupt::EXTI0);
+//!
+//!         (init::LateResources {}, init::Monotonics())
+//!     }
+//!
+//!     #[task(binds = EXTI0)]
+//!     fn spawner(_ctx: spawner::Context) {
+//!         software_task::spawn().unwrap();
+//!     }
+//!
+//!     #[task]
+//!     #[trace]
+//!     fn software_task(_ctx: software_task::Context) {
+//!         asm::delay(1024);
+//!
+//!         #[trace]
+//!         fn func() {
+//!             let _x = 42;
+//!         }
+//!
+//!         asm::delay(1024);
+//!         func();
+//!     }
+//! }
+//! ```
+//! TODO which yields the following trace...
 
+/// The tracing macro. Takes no arguments and should be placed on a
+/// function. Refer to crate example usage.
 pub use rtic_trace_macros::trace;
 
 // TODO is there an even better way to store this?
 static mut WATCH_VARIABLE: u32 = 0;
 
+/// Auxilliary functions for peripheral configuration. Should be called
+/// in the init-function, and preferably in order of (1)
+/// [setup::core_peripherals]; (2) [setup::device_peripherals]; and
+/// last, (3) [setup::assign_dwt_unit]. Refer to crate example usage.
 pub mod setup {
     use cortex_m::peripheral as Core;
     use cortex_m::peripheral::{
@@ -13,15 +70,15 @@ pub mod setup {
     };
     use stm32f4::stm32f401 as Device;
 
-    /// Setup all core peripherals for task tracing.
-    // TODO add option to enable/disable global/local timestamps
+    /// Configures all related core peripherals for RTIC task tracing.
+    // TODO add option to enable/disable global/local timestamps?
     pub fn core_peripherals(
         dcb: &mut Core::DCB,
         tpiu: &mut Core::TPIU,
         dwt: &mut Core::DWT,
         itm: &mut Core::ITM,
     ) {
-        // TODO check feature availability
+        // TODO check feature availability; return error if not supported.
 
         // enable tracing
         dcb.enable_trace();
@@ -57,6 +114,7 @@ pub mod setup {
         }
     }
 
+    /// Configures all related device peripherals for RTIC task tracing.
     pub fn device_peripherals(dbgmcu: &mut Device::DBGMCU) {
         #[rustfmt::skip]
         dbgmcu.cr.modify(
@@ -67,6 +125,10 @@ pub mod setup {
         );
     }
 
+    /// Assigns and consumes a DWT comparator for RTIC software task
+    /// tracing. The unit is indirectly utilized by [super::trace]. Any
+    /// changes to the unit after this function yields undefined
+    /// behavior, in regards to RTIC task tracing.
     pub fn assign_dwt_unit(dwt: &Core::dwt::Comparator) {
         let watch_address: u32 = unsafe { &super::WATCH_VARIABLE as *const _ } as u32;
         // TODO do we need to clear the MATCHED, bit[24] after every match?
@@ -80,6 +142,8 @@ pub mod setup {
     }
 }
 
+/// The function utilized by [trace] to write the unique software task
+/// ID to the watch address. Should not be used directly.
 #[inline]
 pub fn __write_trace_payload(id: u32) {
     // TODO only write as much as needed. e.g. for id < 256, only 8 bits
