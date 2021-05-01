@@ -81,7 +81,9 @@ pub mod setup {
 }
 
 #[inline]
-pub fn set_current_task_id(id: u32) {
+pub fn __write_trace_payload(id: u32) {
+    // TODO only write as much as needed. e.g. for id < 256, only 8 bits
+    // must be written.
     unsafe {
         WATCH_VARIABLE = id;
     }

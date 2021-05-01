@@ -9,7 +9,7 @@ static mut TRACE_ID: usize = 0;
 pub fn trace(_attrs: TokenStream, item: TokenStream) -> TokenStream {
     let mut fun = parse_macro_input!(item as ItemFn);
     fun.block.stmts = {
-        let id = syn::parse_str::<LitInt>(
+        let task_id = syn::parse_str::<LitInt>(
             format!("{}", unsafe {
                 let retval = TRACE_ID;
                 TRACE_ID += 1;
@@ -19,7 +19,7 @@ pub fn trace(_attrs: TokenStream, item: TokenStream) -> TokenStream {
         )
         .unwrap();
         let trace_stmt = syn::parse2::<Stmt>(quote!(
-            ::rtic_trace::set_current_task_id(#id);
+            ::rtic_trace::__write_trace_payload(#task_id);
         ))
         .unwrap();
 
