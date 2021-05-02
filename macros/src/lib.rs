@@ -13,9 +13,9 @@ pub fn trace(_attrs: TokenStream, item: TokenStream) -> TokenStream {
         // variable that preserves state over multiple macro calls.
         let task_id = syn::parse_str::<LitInt>(
             format!("{}", unsafe {
-                let retval = TRACE_ID;
+                let id = TRACE_ID;
                 TRACE_ID += 1;
-                retval
+                id
             })
             .as_str(),
         )
