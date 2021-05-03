@@ -7,7 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cortex-m = "0.7"
+cortex-m = { version = "0.7", optional = true }
 rtic-trace-macros = { path = "macros", optional = true }
 proc-macro2 = { version = "1", optional = true }
 syn = { version = "1", optional = true, features = [ "full", "parsing" ] }
@@ -21,13 +21,19 @@ cargo = { version = "0.52", optional = true }
 [dependencies.stm32f4]
 version = "0.13"
 features = ["stm32f401"]
+optional = true
 
 [workspace]
 members = [ "macros" ]
 
 [features]
-default = [ "rtic-trace-macros" ]
-std = [
+default = []
+tracing = [
+    "cortex-m",
+    "stm32f4",
+    "rtic-trace-macros",
+]
+parsing = [
     "proc-macro2",
     "syn",
     "quote",

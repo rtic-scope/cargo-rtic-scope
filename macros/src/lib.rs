@@ -24,7 +24,7 @@ pub fn trace(_attrs: TokenStream, item: TokenStream) -> TokenStream {
         // Insert a statement at the start and end of the given function
         // that writes the unique task ID to the watchpoint address.
         let trace_stmt = syn::parse2::<Stmt>(quote!(
-            ::rtic_trace::__write_trace_payload(#task_id);
+            ::rtic_trace::tracing::__write_trace_payload(#task_id);
         ))
         .unwrap();
         let mut stmts = vec![trace_stmt.clone()];
