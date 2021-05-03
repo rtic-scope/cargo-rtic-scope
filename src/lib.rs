@@ -51,6 +51,9 @@
 //! ```
 //! TODO which yields the following trace...
 
+#[cfg(feature = "std")]
+pub mod parsing;
+
 /// The tracing macro. Takes no arguments and should be placed on a
 /// function. Refer to crate example usage.
 #[cfg(not(feature = "std"))]
