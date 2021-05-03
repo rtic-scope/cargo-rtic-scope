@@ -8,7 +8,10 @@ edition = "2018"
 
 [dependencies]
 cortex-m = "0.7"
-rtic-trace-macros = { path = "macros" }
+rtic-trace-macros = { path = "macros", optional = true }
+proc-macro2 = { version = "1", optional = true }
+syn = { version = "1", optional = true }
+quote = { version = "1", optional = true }
 
 [dependencies.stm32f4]
 version = "0.13"
@@ -16,6 +19,14 @@ features = ["stm32f401"]
 
 [workspace]
 members = [ "macros" ]
+
+[features]
+default = [ "rtic-trace-macros" ]
+std = [
+    "proc-macro2",
+    "syn",
+    "quote",
+]
 
 [patch.crates-io]
 cortex-m = { path = "../../cortex-m" }

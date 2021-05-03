@@ -1,4 +1,4 @@
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 //! A crate that enables childishly simple tracing of software and
 //! hardware tasks of `cortex-m-rtic` applications.
 //!
@@ -53,15 +53,18 @@
 
 /// The tracing macro. Takes no arguments and should be placed on a
 /// function. Refer to crate example usage.
+#[cfg(not(feature = "std"))]
 pub use rtic_trace_macros::trace;
 
 // TODO is there an even better way to store this?
+#[cfg(not(feature = "std"))]
 static mut WATCH_VARIABLE: u32 = 0;
 
 /// Auxilliary functions for peripheral configuration. Should be called
 /// in the init-function, and preferably in order of (1)
 /// [setup::core_peripherals]; (2) [setup::device_peripherals]; and
 /// last, (3) [setup::assign_dwt_unit]. Refer to crate example usage.
+#[cfg(not(feature = "std"))]
 pub mod setup {
     use cortex_m::peripheral as Core;
     use cortex_m::peripheral::{
@@ -144,6 +147,7 @@ pub mod setup {
 
 /// The function utilized by [trace] to write the unique software task
 /// ID to the watch address. Should not be used directly.
+#[cfg(not(feature = "std"))]
 #[inline]
 pub fn __write_trace_payload(id: u32) {
     // TODO only write as much as needed. e.g. for id < 256, only 8 bits
