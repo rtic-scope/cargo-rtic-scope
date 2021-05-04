@@ -1,3 +1,4 @@
+use anyhow::{bail, Result};
 use cargo;
 use include_dir::include_dir;
 use libloading;
@@ -12,105 +13,107 @@ use std::io::Write;
 use std::path::PathBuf;
 use tempfile;
 
-type HwAssocs = BTreeMap<u8, (syn::Ident, syn::Ident)>;
-type SwAssocs = BTreeMap<usize, Vec<syn::Ident>>;
+type HwExceptionNumber = u8;
+type SwExceptionNumber = usize;
+type ExceptionIdent = syn::Ident;
+type HwAssocs = BTreeMap<HwExceptionNumber, ([syn::Ident; 2], ExceptionIdent)>;
+type SwAssocs = BTreeMap<SwExceptionNumber, Vec<syn::Ident>>;
 
-pub fn hardware_tasks(app: TokenStream, args: TokenStream) -> Result<HwAssocs, ()> {
+/// Parses an RTIC `#[app(device = ...)] mod app { ... }` and associates
+/// the full path of hardware task functions to their exception numbers
+/// as reported by the target.
+pub fn hardware_tasks(app: TokenStream, args: TokenStream) -> Result<HwAssocs> {
     let mut settings = rtic_syntax::Settings::default();
     settings.parse_binds = true;
-    let (rtic_app, _analysis) = rtic_syntax::parse2(args, app.clone(), settings).unwrap();
+    let (app, _analysis) = rtic_syntax::parse2(args, app.clone(), settings)?;
 
-    // Associate hardware tasks to their interrupt numbers
-    let (crate_name, crate_feature) = {
-        let mut segs: Vec<Ident> = rtic_app
-            .args
-            .device
-            .as_ref()
-            .unwrap()
-            .segments
-            .iter()
-            .map(|ps| ps.ident.clone())
-            .collect();
-        (segs.remove(0), segs.remove(0))
-    };
-    let binds: Vec<Ident> = rtic_app
+    // Find the bound exceptions from the #[task(bound = ...)] arguments.
+    let binds: Vec<Ident> = app
         .hardware_tasks
         .iter()
-        .map(|(_name, ht)| ht.args.binds.clone())
+        .map(|(_name, hwt)| hwt.args.binds.clone())
         .collect();
-    let int_nrs = resolve_int_nrs(&binds, &crate_name, &crate_feature);
-    Ok(rtic_app
+
+    // Parse out the PAC from #[app(device = ...)] and resolve exception
+    // numbers from bound idents.
+    let device_arg: Vec<syn::Ident> = match app.args.device.as_ref() {
+        None => bail!("expected argument #[app(device = ...)] is missing"),
+        Some(device) => device.segments.iter().map(|ps| ps.ident.clone()).collect(),
+    };
+    let ints = match &device_arg[..] {
+        [crate_name] => resolve_int_nrs(&binds, &crate_name, None)?,
+        [crate_name, crate_feature] => resolve_int_nrs(&binds, &crate_name, Some(&crate_feature))?,
+        _ => bail!("argument passed to #[app(device = ...)] cannot be parsed"),
+    };
+
+    Ok(app
         .hardware_tasks
         .iter()
-        .map(|(name, ht)| {
-            let bind = &ht.args.binds;
-            let int = int_nrs.get(&bind).unwrap();
-            (int.clone(), (name.clone(), bind.clone()))
+        .map(|(name, hwt)| {
+            let bind = &hwt.args.binds;
+            let int = ints.get(&bind).unwrap();
+            (
+                int.clone(),
+                ([syn::parse_quote!(app), name.clone()], bind.clone()),
+            )
         })
         .collect())
 }
 
-const ADHOC_FUNC_PREFIX: &str = "rtic_scope_func_";
-const ADHOC_TARGET_DIR_ENV: &str = "RTIC_SCOPE_CARGO_TARGET_DIR";
-
-pub fn resolve_int_nrs(
+fn resolve_int_nrs(
     binds: &[Ident],
     crate_name: &Ident,
-    crate_feature: &Ident,
-) -> BTreeMap<Ident, u8> {
-    // generate a temporary directory
-    let tmpdir = tempfile::tempdir().unwrap();
+    crate_feature: Option<&Ident>,
+) -> Result<BTreeMap<Ident, u8>> {
+    const ADHOC_FUNC_PREFIX: &str = "rtic_scope_func_";
+    const ADHOC_TARGET_DIR_ENV: &str = "RTIC_SCOPE_CARGO_TARGET_DIR";
 
-    // extract the skeleton crate
-    include_dir!("assets/libadhoc")
-        .extract(tmpdir.path())
-        .unwrap();
-
-    // append the crate (and its feature) we need
+    // Prepare a temporary directory for adhoc build
+    let tmpdir = tempfile::tempdir()?;
+    include_dir!("assets/libadhoc").extract(tmpdir.path())?;
+    // Add required crate (and eventual feature) as dependency
     {
-        let mut lib_manifest = fs::OpenOptions::new()
+        let mut manifest = fs::OpenOptions::new()
             .append(true)
-            .open(tmpdir.path().join("Cargo.toml"))
-            .unwrap();
-        lib_manifest
-            .write_all(
-                format!(
-                    "\n{} = {{ version = \"\", features = [\"{}\"]}}\n",
-                    crate_name, crate_feature
-                )
-                .as_bytes(),
-            )
-            .unwrap();
-    }
-
-    // append the includes and functions we need
-    let mut lib_src = fs::OpenOptions::new()
-        .append(true)
-        .open(tmpdir.path().join("src/lib.rs"))
-        .unwrap();
-    let include = quote!(
-        use #crate_name::#crate_feature::Interrupt;
-    );
-    lib_src
-        .write_all(format!("\n{}\n", include).as_bytes())
-        .unwrap();
-    for bind in binds {
-        let func = format_ident!("{}{}", ADHOC_FUNC_PREFIX, bind);
-        let int_field = format_ident!("{}", bind);
-        let src = quote!(
-            #[no_mangle]
-            pub extern fn #func() -> u8 {
-                Interrupt::#int_field.nr()
+            .open(tmpdir.path().join("Cargo.toml"))?;
+        let dep = format!(
+            "\n{} = {{ version = \"\", features = [\"{}\"]}}\n",
+            crate_name,
+            match crate_feature {
+                Some(feat) => format!("{}", feat),
+                None => "".to_string(),
             }
         );
-        lib_src
-            .write_all(format!("\n{}\n", src).as_bytes())
-            .unwrap();
+        manifest.write_all(dep.as_bytes())?;
+    }
+    {
+        // Import PAC::Interrupt
+        let mut src = fs::OpenOptions::new()
+            .append(true)
+            .open(tmpdir.path().join("src/lib.rs"))?;
+        let import = match crate_feature {
+            Some(_) => quote!(use #crate_name::#crate_feature::Interrupt;),
+            None => quote!(use #crate_name::Interrupt;),
+        };
+        src.write_all(format!("\n{}\n", import).as_bytes())?;
+
+        // Generate the functions that must be exported
+        for bind in binds {
+            let fun = format_ident!("{}{}", ADHOC_FUNC_PREFIX, bind);
+            let int_ident = format_ident!("{}", bind);
+            let fun = quote!(
+                #[no_mangle]
+                pub extern fn #fun() -> u8 {
+                    Interrupt::#int_ident.nr()
+                }
+            );
+            src.write_all(format!("\n{}\n", fun).as_bytes())?;
+        }
     }
 
-    // cargo build the adhoc cdylib library
-    let cc = cargo::util::config::Config::default().unwrap();
-    let mut ws = cargo::core::Workspace::new(&tmpdir.path().join("Cargo.toml"), &cc).unwrap();
+    // Build the adhoc library, load it, and resolve all exception idents
+    let cc = cargo::util::config::Config::default()?;
+    let mut ws = cargo::core::Workspace::new(&tmpdir.path().join("Cargo.toml"), &cc)?;
     let target_dir = if let Ok(target) =
         env::var("CARGO_TARGET_DIR").or_else(|_| env::var(ADHOC_TARGET_DIR_ENV))
     {
@@ -121,16 +124,11 @@ pub fn resolve_int_nrs(
     ws.set_target_dir(cargo::util::Filesystem::new(target_dir));
     let build = cargo::ops::compile(
         &ws,
-        &cargo::ops::CompileOptions::new(&cc, cargo::core::compiler::CompileMode::Build).unwrap(),
-    )
-    .unwrap();
+        &cargo::ops::CompileOptions::new(&cc, cargo::core::compiler::CompileMode::Build)?,
+    )?;
     assert!(build.cdylibs.len() == 1);
-
-    // Load the library and find the bind mappings
-    let lib = unsafe {
-        libloading::Library::new(build.cdylibs.first().unwrap().path.as_os_str()).unwrap()
-    };
-    binds
+    let lib = unsafe { libloading::Library::new(build.cdylibs.first().unwrap().path.as_os_str())? };
+    Ok(binds
         .into_iter()
         .map(|b| {
             let func: libloading::Symbol<extern "C" fn() -> u8> = unsafe {
@@ -139,7 +137,7 @@ pub fn resolve_int_nrs(
             };
             (b.clone(), func())
         })
-        .collect()
+        .collect())
 }
 
 struct TaskIDGenerator(usize);
@@ -157,10 +155,10 @@ impl TaskIDGenerator {
     }
 }
 
-/// Parses an RTIC `mod app` and associates the absolute path of the
+/// Parses an RTIC `mod app { ... }` and associates the absolute path of the
 /// functions that are decorated with the `trace`-macro with it's
 /// assigned task ID.
-pub fn software_tasks(app: TokenStream) -> Result<SwAssocs, syn::Error> {
+pub fn software_tasks(app: TokenStream) -> Result<SwAssocs> {
     let app = syn::parse2::<syn::Item>(app)?;
     let mut ctx: Vec<syn::Ident> = vec![];
     let mut assocs = SwAssocs::new();

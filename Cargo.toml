@@ -17,6 +17,7 @@ libloading = { version = "0.7", optional = true }
 tempfile = { version = "3", optional = true }
 rtic-syntax = { git = "https://github.com/rtic-rs/rtic-syntax.git", optional = true }
 cargo = { version = "0.52", optional = true }
+anyhow = { version = "1", optional = true }
 
 [dependencies.stm32f4]
 version = "0.13"
@@ -42,6 +43,7 @@ parsing = [
     "tempfile",
     "rtic-syntax",
     "cargo",
+    "anyhow",
 ]
 
 [patch.crates-io]
