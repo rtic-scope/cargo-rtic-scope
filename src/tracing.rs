@@ -1,5 +1,4 @@
-//! A crate that enables childishly simple tracing of software and
-//! hardware tasks of `cortex-m-rtic` applications.
+//! Tracing module, for use on the embedded target.
 //!
 //! TODO explain how it works
 //!
@@ -145,7 +144,10 @@ pub mod setup {
 }
 
 /// The function utilized by [trace] to write the unique software task
-/// ID to the watch address. Should not be used directly.
+/// ID to the watch address. You are discouraged to use this function
+/// directly; [trace] uses a sequence of task IDs compatible with the
+/// `parsing` module. If used directly, task IDs must also be properly
+/// configured for the host application.
 #[cfg(not(feature = "std"))]
 #[inline]
 pub fn __write_trace_payload(id: u32) {

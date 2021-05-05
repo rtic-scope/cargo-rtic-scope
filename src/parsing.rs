@@ -19,9 +19,9 @@ type ExceptionIdent = syn::Ident;
 type HwAssocs = BTreeMap<HwExceptionNumber, ([syn::Ident; 2], ExceptionIdent)>;
 type SwAssocs = BTreeMap<SwExceptionNumber, Vec<syn::Ident>>;
 
-/// Parses an RTIC `#[app(device = ...)] mod app { ... }` and associates
-/// the full path of hardware task functions to their exception numbers
-/// as reported by the target.
+/// Parses an RTIC `#[app(device = ...)] mod app { ... }` declaration
+/// and associates the full path of hardware task functions to their
+/// exception numbers as reported by the target.
 pub fn hardware_tasks(app: TokenStream, args: TokenStream) -> Result<HwAssocs> {
     let mut settings = rtic_syntax::Settings::default();
     settings.parse_binds = true;
@@ -155,9 +155,9 @@ impl TaskIDGenerator {
     }
 }
 
-/// Parses an RTIC `mod app { ... }` and associates the absolute path of the
-/// functions that are decorated with the `trace`-macro with it's
-/// assigned task ID.
+/// Parses an RTIC `mod app { ... }` declaration and associates the full
+/// path of the functions that are decorated with the `#[trace]`-macro
+/// with it's assigned task ID.
 pub fn software_tasks(app: TokenStream) -> Result<SwAssocs> {
     let app = syn::parse2::<syn::Item>(app)?;
     let mut ctx: Vec<syn::Ident> = vec![];
