@@ -11,3 +11,10 @@ structopt = "0.3"
 clap = "2.33"
 cargo_metadata = "0.11"
 anyhow = "1"
+syn = "1"
+proc-macro2 = "1"
+
+[dependencies.rtic-trace]
+path = "../rtic-trace"
+default-features = false
+features = [ "parsing" ]
