@@ -112,6 +112,10 @@ fn resolve_int_nrs(
     }
 
     // Build the adhoc library, load it, and resolve all exception idents
+
+    // NOTE: change working directory so that our build environment does
+    // not contain any eventual `.cargo/config`.
+    assert!(env::set_current_dir(tmpdir.path()).is_ok());
     let cc = cargo::util::config::Config::default()?;
     let mut ws = cargo::core::Workspace::new(&tmpdir.path().join("Cargo.toml"), &cc)?;
     let target_dir = if let Ok(target) =
