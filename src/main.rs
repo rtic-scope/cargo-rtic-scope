@@ -7,10 +7,12 @@ use proc_macro2::{TokenStream, TokenTree};
 use std::env;
 use std::fs;
 use syn;
+use std::io::Read;
 
 use anyhow::{Context, Result};
 use probe_rs::{flashing, Probe};
 use structopt::StructOpt;
+use itm_decode::{self, DecoderState};
 
 mod building;
 
@@ -47,17 +49,17 @@ fn main() -> Result<()> {
     println!("{:?}", artifact);
 
     // ensure serial port is properly configured
-    let port = {
-        let mut stty = std::process::Command::new("stty");
-        stty.args(&["-F", opt.serial.as_str()]);
-        stty.arg("406:0:18b2:8a30:3:1c:7f:15:4:2:64:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0");
-        let mut child = stty.spawn()?;
-        let _ = child.wait()?;
+    // let mut port = {
+    //     // let mut stty = std::process::Command::new("stty");
+    //     // stty.args(&["-F", opt.serial.as_str()]);
+    //     // stty.arg("406:0:18b2:8a30:3:1c:7f:15:4:2:64:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0");
+    //     // let mut child = stty.spawn()?;
+    //     // let _ = child.wait()?;
 
-        serialport::new(opt.serial, 115_200)
-            .open()
-            .context("Failed to open serial port")?
-    };
+    //     serialport::new(opt.serial, 115_200)
+    //         .open()
+    //         .context("Failed to open serial port")?
+    // };
 
     // resolve the data we need from RTIC app decl.
     if !opt.dont_resolve {
@@ -108,13 +110,36 @@ fn main() -> Result<()> {
     .context("Unable to flash target firmware")?;
     println!("Flashed.");
 
+    // TODO start recording the serial port here
+
     // reset the target and execute flashed firmware
     println!("Resetting target...");
     let mut core = session.core(0)?;
     core.reset().context("Unable to reset target")?;
     println!("Reset.");
 
+    let mut port = fs::OpenOptions::new().read(true).open("/dev/ttyUSB3")?;
+
     // TODO collect trace until some stop condition
+    // TODO start collecting before target is reset
+    let mut decoder = itm_decode::Decoder::new();
+    let mut buf: [u8; 256] = [0; 256];
+    while let Ok(n) = port.read(&mut buf) {
+        println!("I read {} bytes", n);
+        decoder.push(buf[..n].to_vec());
+        buf = [0; 256];
+
+        loop {
+            match decoder.pull() {
+                Ok(None) => break,
+                Ok(Some(packet)) => println!("{:?}", packet),
+                Err(e) => {
+                    println!("Error: {:?}", e);
+                    decoder.state = DecoderState::Header;
+                }
+            }
+        }
+    }
 
     // TODO save trace somewhere for offline analysis.
 
