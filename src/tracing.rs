@@ -67,6 +67,7 @@ pub mod setup {
     use cortex_m::peripheral as Core;
     use cortex_m::peripheral::{
         dwt::{AccessType, ComparatorAddressSettings, ComparatorFunction, EmitOption},
+        itm::{GlobalTimestampOptions, ITMSettings, LocalTimestampOptions, TimestampClkSrc},
         tpiu::TraceProtocol,
     };
     use stm32f4::stm32f401 as Device;
@@ -92,27 +93,14 @@ pub mod setup {
         dwt.enable_pc_samples(false);
 
         itm.unlock();
-        // itm.configure(ITMSettings {
-        //     enable: true, // ITMENA
-        //     enable_local_timestamps: true, // TSENA XXX also take prescalar?
-        //     forward_dwt: true, // TXENA
-        //     global_timestamps: GlobalTimestamps::Every8192Cycles, // GTSFREQ
-        //     bus_id: 1, // TraceBusID
-        //     // XXX What about SYNCENA, SWOENA?
-        // });
-
-        // TODO PR new functions to cortex-m
-        unsafe {
-            itm.lar.write(0xc5acce55); // unlock ITM register
-            itm.tcr.modify(|mut r| {
-                r |= 1 << 0; // ITMENA: master enable
-                r |= 1 << 1; // TSENA: enable local timestamps
-                r |= 1 << 3; // TXENA: forward DWT event packets to ITM
-                r |= 0b00 << 10; // GTSFREQ: disable global timestamps
-                r |= 1 << 16; // TraceBusID=1
-                r
-            });
-        }
+        itm.configure(ITMSettings {
+            enable: true,      // ITMENA: master enable
+            forward_dwt: true, // TXENA: forward DWT packets
+            local_timestamps: LocalTimestampOptions::Enabled,
+            global_timestamps: GlobalTimestampOptions::Disabled,
+            bus_id: Some(1),
+            timestamp_clk_src: TimestampClkSrc::SystemClock,
+        });
     }
 
     /// Configures all related device peripherals for RTIC task tracing.
