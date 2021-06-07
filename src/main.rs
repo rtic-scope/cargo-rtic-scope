@@ -20,20 +20,31 @@ struct Opt {
     #[structopt(long = "bin")]
     bin: String,
 
-    // TODO handle example (or forward unknown arguments to rustc)
+    // TODO handle --example (or forward unknown arguments to rustc)
     /// Serial device over which trace stream is expected.
     #[structopt(long = "serial")]
     serial: String,
 }
 
 fn main() -> Result<()> {
-    let opt = Opt::from_iter(env::args().skip(1));
+    let opt = Opt::from_iter(env::args().skip(1)); // first argument is the subcommand name
 
     // build wanted binary
     let artifact = building::cargo_build(&opt.bin)?;
     println!("{:?}", artifact);
 
-    // TODO ensure --serial is properly configured
+    // ensure serial port is properly configured
+    let port = {
+        let mut stty = std::process::Command::new("stty");
+        stty.args(&["-F", opt.serial.as_str()]);
+        stty.arg("406:0:18b2:8a30:3:1c:7f:15:4:2:64:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0");
+        let mut child = stty.spawn()?;
+        let _ = child.wait()?;
+
+        serialport::new(opt.serial, 115_200)
+            .open()
+            .context("Failed to open serial port")?
+    };
 
     // resolve the data we need from RTIC app decl.
     {

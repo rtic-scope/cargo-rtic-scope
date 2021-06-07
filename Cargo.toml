@@ -18,3 +18,7 @@ proc-macro2 = "1"
 path = "../rtic-trace"
 default-features = false
 features = [ "parsing" ]
+
+[dependencies.serialport]
+version = "4"
+default-features = false # we don't need libudev functionalities
