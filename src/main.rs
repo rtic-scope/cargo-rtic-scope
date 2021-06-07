@@ -25,6 +25,10 @@ struct Opt {
     /// Serial device over which trace stream is expected.
     #[structopt(long = "serial")]
     serial: String,
+
+    /// Don't attempt to resolve hardware or software tasks.
+    #[structopt(long = "dont-resolve")]
+    dont_resolve: bool,
 }
 
 fn main() -> Result<()> {
@@ -56,7 +60,7 @@ fn main() -> Result<()> {
     };
 
     // resolve the data we need from RTIC app decl.
-    {
+    if !opt.dont_resolve {
         // parse the RTIC app from the source file
         let src = fs::read_to_string(artifact.target.src_path)
             .context("Failed to open RTIC app source file")?;
