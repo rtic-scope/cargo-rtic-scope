@@ -108,7 +108,11 @@ fn main() -> Result<()> {
     .context("Unable to flash target firmware")?;
     println!("Flashed.");
 
-    // TODO properly run the flashed binary
+    // reset the target and execute flashed firmware
+    println!("Resetting target...");
+    let mut core = session.core(0)?;
+    core.reset().context("Unable to reset target")?;
+    println!("Reset.");
 
     // TODO collect trace until some stop condition
 
