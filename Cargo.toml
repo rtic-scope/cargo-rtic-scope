@@ -13,6 +13,7 @@ cargo_metadata = "0.11"
 anyhow = "1"
 syn = "1"
 proc-macro2 = "1"
+probe-rs = "0.10"
 
 [dependencies.rtic-trace]
 path = "../rtic-trace"

@@ -9,6 +9,7 @@ use std::fs;
 use syn;
 
 use anyhow::{Context, Result};
+use probe_rs::{flashing, Probe};
 use structopt::StructOpt;
 
 mod building;
@@ -28,6 +29,14 @@ struct Opt {
 
 fn main() -> Result<()> {
     let opt = Opt::from_iter(env::args().skip(1)); // first argument is the subcommand name
+
+    // attach target early to fail fast on any I/O issues
+    let probe = Probe::list_all()[0]
+        .open()
+        .context("Unable to open probe")?;
+    let mut session = probe
+        .attach("stm32f401re")
+        .context("Unable to attach to probe")?;
 
     // build wanted binary
     let artifact = building::cargo_build(&opt.bin)?;
@@ -84,7 +93,16 @@ fn main() -> Result<()> {
         }
     }
 
-    // TODO flash binary with probe.rs
+    // flash binary with probe.rs
+    println!("Flashing {}...", opt.bin);
+    // TODO use a progress bar alike cargo-flash
+    flashing::download_file(
+        &mut session,
+        &artifact.executable.unwrap(),
+        flashing::Format::Elf,
+    )
+    .context("Unable to flash target firmware")?;
+    println!("Flashed.");
 
     // TODO properly run the flashed binary
 
