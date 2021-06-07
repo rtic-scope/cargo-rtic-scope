@@ -118,10 +118,5 @@ fn main() -> Result<()> {
 
     // TODO save trace somewhere for offline analysis.
 
-    // println!("Hello, world!");
-
-    // Note: the first argument is the name of this binary
-    // (`cargo-rtic-trace`), which we do not care about.
-
     Ok(())
 }
