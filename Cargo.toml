@@ -15,6 +15,7 @@ syn = "1"
 proc-macro2 = "1"
 probe-rs = "0.10"
 itm-decode = "0.3"
+nix = "0.21.0"
 
 [dependencies.rtic-trace]
 path = "../rtic-trace"

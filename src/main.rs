@@ -15,6 +15,7 @@ use structopt::StructOpt;
 use itm_decode::{self, DecoderState};
 
 mod building;
+mod serial;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "cargo-rtic-trace", about = "TODO")]
