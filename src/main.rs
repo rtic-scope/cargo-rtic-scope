@@ -86,9 +86,11 @@ fn main() -> Result<()> {
         let app = rtic_app.collect::<TokenStream>();
 
         println!("Hardware tasks:");
-        for (int, (fun, ex_ident)) in rtic_trace::parsing::hardware_tasks(app.clone(), args)? {
-            println!("{} binds {} ({})", fun[1], ex_ident, int);
-        }
+        let (int, ext) = rtic_trace::parsing::hardware_tasks(app.clone(), args)?;
+        println!("int: {:?}, ext: {:?}", int, ext);
+        // for (int, (fun, ex_ident)) in rtic_trace::parsing::hardware_tasks(app.clone(), args)? {
+        //     println!("{} binds {} ({})", fun[1], ex_ident, int);
+        // }
 
         println!("Software tasks:");
         for (k, v) in rtic_trace::parsing::software_tasks(app)? {
