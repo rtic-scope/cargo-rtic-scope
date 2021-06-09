@@ -6,13 +6,13 @@
 use proc_macro2::{TokenStream, TokenTree};
 use std::env;
 use std::fs;
-use syn;
 use std::io::Read;
+use syn;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
+use itm_decode::{self, DecoderState};
 use probe_rs::{flashing, Probe};
 use structopt::StructOpt;
-use itm_decode::{self, DecoderState};
 
 mod building;
 mod serial;
@@ -35,32 +35,28 @@ struct Opt {
 }
 
 fn main() -> Result<()> {
-    let opt = Opt::from_iter(env::args().skip(1)); // first argument is the subcommand name
+    let opt = Opt::from_iter(
+        // NOTE(skip): first argument is the subcommand name
+        env::args().skip(1),
+    );
 
-    // attach target early to fail fast on any I/O issues
-    let probe = Probe::list_all()[0]
-        .open()
-        .context("Unable to open probe")?;
+    // Attach to target and prepare serial. We want to fail fast on any
+    // I/O issues.
+    //
+    // TODO allow user to specify probe and target
+    let mut trace_tty = serial::configure(opt.serial)?;
+    let probes = Probe::list_all();
+    if probes.len() == 0 {
+        bail!("No supported target probes found");
+    }
+    println!("Opening first probe and attaching...");
+    let probe = probes[0].open().context("Unable to open first probe")?;
     let mut session = probe
         .attach("stm32f401re")
-        .context("Unable to attach to probe")?;
+        .context("Unable to attach to stm32f401re")?;
 
-    // build wanted binary
+    // Build the wanted binary
     let artifact = building::cargo_build(&opt.bin)?;
-    println!("{:?}", artifact);
-
-    // ensure serial port is properly configured
-    // let mut port = {
-    //     // let mut stty = std::process::Command::new("stty");
-    //     // stty.args(&["-F", opt.serial.as_str()]);
-    //     // stty.arg("406:0:18b2:8a30:3:1c:7f:15:4:2:64:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0");
-    //     // let mut child = stty.spawn()?;
-    //     // let _ = child.wait()?;
-
-    //     serialport::new(opt.serial, 115_200)
-    //         .open()
-    //         .context("Failed to open serial port")?
-    // };
 
     // resolve the data we need from RTIC app decl.
     if !opt.dont_resolve {
@@ -71,7 +67,7 @@ fn main() -> Result<()> {
             .context("Failed to parse RTIC app source file")?
             .into_iter()
             .skip_while(|token| {
-                // TODO improve this?
+                // TODO improve this
                 if let TokenTree::Group(g) = token {
                     return g.stream().into_iter().nth(0).unwrap().to_string().as_str() != "app";
                 }
@@ -80,7 +76,7 @@ fn main() -> Result<()> {
         let args = {
             let mut args: Option<TokenStream> = None;
             if let TokenTree::Group(g) = rtic_app.next().unwrap() {
-                // TODO improve this?
+                // TODO improve this
                 if let TokenTree::Group(g) = g.stream().into_iter().nth(1).unwrap() {
                     args = Some(g.stream());
                 }
@@ -100,9 +96,10 @@ fn main() -> Result<()> {
         }
     }
 
-    // flash binary with probe.rs
-    println!("Flashing {}...", opt.bin);
+    // Flash binary to target
+    //
     // TODO use a progress bar alike cargo-flash
+    println!("Flashing {}...", opt.bin);
     flashing::download_file(
         &mut session,
         &artifact.executable.unwrap(),
@@ -111,21 +108,17 @@ fn main() -> Result<()> {
     .context("Unable to flash target firmware")?;
     println!("Flashed.");
 
-    // TODO start recording the serial port here
-
-    // reset the target and execute flashed firmware
+    // Reset the target and execute flashed binary
     println!("Resetting target...");
     let mut core = session.core(0)?;
     core.reset().context("Unable to reset target")?;
     println!("Reset.");
 
-    let mut port = fs::OpenOptions::new().read(true).open("/dev/ttyUSB3")?;
-
     // TODO collect trace until some stop condition
     // TODO start collecting before target is reset
     let mut decoder = itm_decode::Decoder::new();
     let mut buf: [u8; 256] = [0; 256];
-    while let Ok(n) = port.read(&mut buf) {
+    while let Ok(n) = trace_tty.read(&mut buf) {
         println!("I read {} bytes", n);
         decoder.push(buf[..n].to_vec());
         buf = [0; 256];
