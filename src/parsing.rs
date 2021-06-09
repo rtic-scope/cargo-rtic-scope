@@ -16,23 +16,51 @@ use tempfile;
 type HwExceptionNumber = u8;
 type SwExceptionNumber = usize;
 type ExceptionIdent = syn::Ident;
-type HwAssocs = BTreeMap<HwExceptionNumber, ([syn::Ident; 2], ExceptionIdent)>;
+type TaskIdent = [syn::Ident; 2];
+type ExternalHwAssocs = BTreeMap<HwExceptionNumber, (TaskIdent, ExceptionIdent)>;
+type InternalHwAssocs = BTreeMap<ExceptionIdent, TaskIdent>;
 type SwAssocs = BTreeMap<SwExceptionNumber, Vec<syn::Ident>>;
 
 /// Parses an RTIC `#[app(device = ...)] mod app { ... }` declaration
 /// and associates the full path of hardware task functions to their
 /// exception numbers as reported by the target.
-pub fn hardware_tasks(app: TokenStream, args: TokenStream) -> Result<HwAssocs> {
+pub fn hardware_tasks(
+    app: TokenStream,
+    args: TokenStream,
+) -> Result<(InternalHwAssocs, ExternalHwAssocs)> {
     let mut settings = rtic_syntax::Settings::default();
     settings.parse_binds = true;
     let (app, _analysis) = rtic_syntax::parse2(args, app.clone(), settings)?;
 
-    // Find the bound exceptions from the #[task(bound = ...)] arguments.
-    let binds: Vec<Ident> = app
+    // Find the bound exceptions from the #[task(bound = ...)]
+    // arguments. Further, partition internal and external interrupts.
+    //
+    // For external exceptions (those defined in PAC::Interrupt), we
+    // need to resolve the number we receive over ITM back to the
+    // interrupt name. For internal interrupts, the name of the
+    // execption is received over ITM.
+    let (int_binds, ext_binds): (Vec<Ident>, Vec<Ident>) = app
         .hardware_tasks
         .iter()
         .map(|(_name, hwt)| hwt.args.binds.clone())
-        .collect();
+        .partition(|bind| {
+            [
+                "Reset",
+                "NMI",
+                "HardFault",
+                "MemManage",
+                "BusFault",
+                "UsageFault",
+                "SVCall",
+                "DebugMonitor",
+                "PendSV",
+                "SysTick",
+            ]
+            .iter()
+            .find(|&&int| int == bind.to_string())
+            .is_some()
+        });
+    let binds = ext_binds.clone();
 
     // Parse out the PAC from #[app(device = ...)] and resolve exception
     // numbers from bound idents.
@@ -40,24 +68,43 @@ pub fn hardware_tasks(app: TokenStream, args: TokenStream) -> Result<HwAssocs> {
         None => bail!("expected argument #[app(device = ...)] is missing"),
         Some(device) => device.segments.iter().map(|ps| ps.ident.clone()).collect(),
     };
-    let ints = match &device_arg[..] {
+    let excpt_nrs = match &device_arg[..] {
+        _ if ext_binds.is_empty() => BTreeMap::<Ident, u8>::new(),
         [crate_name] => resolve_int_nrs(&binds, &crate_name, None)?,
         [crate_name, crate_feature] => resolve_int_nrs(&binds, &crate_name, Some(&crate_feature))?,
         _ => bail!("argument passed to #[app(device = ...)] cannot be parsed"),
     };
 
-    Ok(app
+    let int_assocs: InternalHwAssocs = app
         .hardware_tasks
         .iter()
-        .map(|(name, hwt)| {
+        .filter_map(|(name, hwt)| {
             let bind = &hwt.args.binds;
-            let int = ints.get(&bind).unwrap();
-            (
-                int.clone(),
-                ([syn::parse_quote!(app), name.clone()], bind.clone()),
-            )
+            if let Some(_) = int_binds.iter().find(|&b| b == bind) {
+                Some((bind.clone(), [syn::parse_quote!(app), name.clone()]))
+            } else {
+                None
+            }
         })
-        .collect())
+        .collect();
+
+    let ext_assocs: ExternalHwAssocs = app
+        .hardware_tasks
+        .iter()
+        .filter_map(|(name, hwt)| {
+            let bind = &hwt.args.binds;
+            if let Some(int) = excpt_nrs.get(&bind) {
+                Some((
+                    int.clone(),
+                    ([syn::parse_quote!(app), name.clone()], bind.clone()),
+                ))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    Ok((int_assocs, ext_assocs))
 }
 
 fn resolve_int_nrs(
