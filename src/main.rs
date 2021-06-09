@@ -44,9 +44,8 @@ fn main() -> Result<()> {
     // I/O issues.
     //
     // TODO allow user to specify probe and target
-    let mut trace_tty = serial::configure(opt.serial)?;
     let probes = Probe::list_all();
-    if probes.len() == 0 {
+    if probes.is_empty() {
         bail!("No supported target probes found");
     }
     println!("Opening first probe and attaching...");
@@ -54,6 +53,7 @@ fn main() -> Result<()> {
     let mut session = probe
         .attach("stm32f401re")
         .context("Unable to attach to stm32f401re")?;
+    let mut trace_tty = serial::configure(opt.serial)?;
 
     // Build the wanted binary
     let artifact = building::cargo_build(&opt.bin)?;
