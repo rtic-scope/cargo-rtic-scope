@@ -3,18 +3,20 @@
 //     $ cargo rtic-trace --bin blinky --serial /dev/ttyUSB3
 //
 
-use proc_macro2::{TokenStream, TokenTree};
 use std::env;
 use std::fs;
 use std::io::Read;
-use syn;
+use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 use itm_decode::{self, DecoderState};
 use probe_rs::{flashing, Probe};
+use proc_macro2::{TokenStream, TokenTree};
 use structopt::StructOpt;
+use syn;
 
 mod building;
+mod parsing;
 mod serial;
 
 #[derive(Debug, StructOpt)]
@@ -85,15 +87,37 @@ fn main() -> Result<()> {
         };
         let app = rtic_app.collect::<TokenStream>();
 
+        // Find a suitable target directory from --bin which we'll reuse
+        // for building the adhoc library, unless CARGO_TARGET_DIR is
+        // set.
+        let target_dir = if let Ok(target_dir) = env::var("CARGO_TARGET_DIR") {
+            PathBuf::from(target_dir)
+        } else {
+            // Adhoc will end up under some target/thumbv7em-.../
+            // which is technically incorrect, but scanning for a
+            // "target/" in the path is unstable if CARGO_TARGET_DIR is
+            // set, which may not contain a "target/". Our reuse of the
+            // directory is nevertheless commented with a verbose
+            // directory name.
+            let mut path = artifact.executable.clone().unwrap();
+            path.pop();
+            path.push("rtic-trace-adhoc-target");
+            // NOTE(_all): we do not necessarily need to create all
+            // directories, but we do not want to fail if the directory
+            // exists.
+            fs::create_dir_all(&path).unwrap();
+            path
+        };
+
         println!("Hardware tasks:");
-        let (int, ext) = rtic_trace::parsing::hardware_tasks(app.clone(), args)?;
+        let (int, ext) = parsing::hardware_tasks(app.clone(), args, target_dir)?;
         println!("int: {:?}, ext: {:?}", int, ext);
         // for (int, (fun, ex_ident)) in rtic_trace::parsing::hardware_tasks(app.clone(), args)? {
         //     println!("{} binds {} ({})", fun[1], ex_ident, int);
         // }
 
         println!("Software tasks:");
-        for (k, v) in rtic_trace::parsing::software_tasks(app)? {
+        for (k, v) in parsing::software_tasks(app)? {
             println!("({}, {:?})", k, v);
         }
     }
