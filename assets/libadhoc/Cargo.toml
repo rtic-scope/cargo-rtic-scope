@@ -1,0 +1,10 @@
+[package]
+name = "adhoc"
+version = "0.1.0"
+edition = "2018"
+
+[lib]
+crate_type = ["cdylib"]
+
+[dependencies]
+cortex-m = "0.7"

@@ -13,14 +13,15 @@ cargo_metadata = "0.11"
 anyhow = "1"
 syn = "1"
 proc-macro2 = "1"
+quote = "1"
 probe-rs = "0.10"
 itm-decode = "0.3"
 nix = "0.21.0"
-
-[dependencies.rtic-trace]
-path = "../rtic-trace"
-default-features = false
-features = [ "parsing" ]
+include_dir = { git = "https://github.com/tmplt/include_dir.git" }
+libloading = "0.7"
+tempfile = "3"
+rtic-syntax = { git = "https://github.com/rtic-rs/rtic-syntax.git" }
+cargo = "0.52"
 
 [dependencies.serialport]
 version = "4"
