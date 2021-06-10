@@ -27,6 +27,7 @@ type SwAssocs = BTreeMap<SwExceptionNumber, Vec<syn::Ident>>;
 pub fn hardware_tasks(
     app: TokenStream,
     args: TokenStream,
+    target_dir: PathBuf,
 ) -> Result<(InternalHwAssocs, ExternalHwAssocs)> {
     let mut settings = rtic_syntax::Settings::default();
     settings.parse_binds = true;
@@ -70,8 +71,10 @@ pub fn hardware_tasks(
     };
     let excpt_nrs = match &device_arg[..] {
         _ if ext_binds.is_empty() => BTreeMap::<Ident, u8>::new(),
-        [crate_name] => resolve_int_nrs(&binds, &crate_name, None)?,
-        [crate_name, crate_feature] => resolve_int_nrs(&binds, &crate_name, Some(&crate_feature))?,
+        [crate_name] => resolve_int_nrs(&binds, &crate_name, None, target_dir)?,
+        [crate_name, crate_feature] => {
+            resolve_int_nrs(&binds, &crate_name, Some(&crate_feature), target_dir)?
+        }
         _ => bail!("argument passed to #[app(device = ...)] cannot be parsed"),
     };
 
@@ -111,14 +114,15 @@ fn resolve_int_nrs(
     binds: &[Ident],
     crate_name: &Ident,
     crate_feature: Option<&Ident>,
+    target_dir: PathBuf,
 ) -> Result<BTreeMap<Ident, u8>> {
     const ADHOC_FUNC_PREFIX: &str = "rtic_scope_func_";
-    const ADHOC_TARGET_DIR_ENV: &str = "RTIC_SCOPE_CARGO_TARGET_DIR";
 
-    // Prepare a temporary directory for adhoc build
+    // Extract adhoc source to a temporary directory and apply adhoc
+    // modifications.
     let tmpdir = tempfile::tempdir()?;
     include_dir!("assets/libadhoc").extract(tmpdir.path())?;
-    // Add required crate (and eventual feature) as dependency
+    // Add required crate (and optional feature) as dependency
     {
         let mut manifest = fs::OpenOptions::new()
             .append(true)
@@ -133,6 +137,7 @@ fn resolve_int_nrs(
         );
         manifest.write_all(dep.as_bytes())?;
     }
+    // Prepare lib.rs
     {
         // Import PAC::Interrupt
         let mut src = fs::OpenOptions::new()
@@ -159,19 +164,12 @@ fn resolve_int_nrs(
     }
 
     // Build the adhoc library, load it, and resolve all exception idents
-
+    //
     // NOTE: change working directory so that our build environment does
     // not contain any eventual `.cargo/config`.
     assert!(env::set_current_dir(tmpdir.path()).is_ok());
     let cc = cargo::util::config::Config::default()?;
     let mut ws = cargo::core::Workspace::new(&tmpdir.path().join("Cargo.toml"), &cc)?;
-    let target_dir = if let Ok(target) =
-        env::var("CARGO_TARGET_DIR").or_else(|_| env::var(ADHOC_TARGET_DIR_ENV))
-    {
-        PathBuf::from(target)
-    } else {
-        tmpdir.path().join("target/")
-    };
     ws.set_target_dir(cargo::util::Filesystem::new(target_dir));
     let build = cargo::ops::compile(
         &ws,
