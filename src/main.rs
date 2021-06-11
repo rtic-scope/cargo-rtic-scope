@@ -54,7 +54,11 @@ fn main() -> Result<()> {
     let mut trace_tty = serial::configure(opt.serial)?;
 
     // Build the wanted binary
-    let artifact = building::cargo_build(&opt.bin)?;
+    let artifact = building::cargo_build(
+        env::current_dir()?.as_path(),
+        &["--bin", opt.bin.as_str()],
+        "bin",
+    )?;
 
     // Map IRQ numbers to their respective tasks
     let ((excps, ints), sw_tasks) = parsing::resolve_tasks(&artifact)?;

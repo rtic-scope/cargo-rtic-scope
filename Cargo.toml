@@ -21,7 +21,6 @@ include_dir = { git = "https://github.com/tmplt/include_dir.git" }
 libloading = "0.7"
 tempfile = "3"
 rtic-syntax = { git = "https://github.com/rtic-rs/rtic-syntax.git" }
-cargo = "0.52"
 
 [dependencies.serialport]
 version = "4"

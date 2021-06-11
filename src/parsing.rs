@@ -1,11 +1,12 @@
+use crate::building;
+
 use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
-use cargo;
 use cargo_metadata::Artifact;
 use include_dir::include_dir;
 use libloading;
@@ -73,10 +74,13 @@ fn hardware_tasks(
     };
     let excpt_nrs = match &device_arg[..] {
         _ if ext_binds.is_empty() => BTreeMap::<Ident, u8>::new(),
-        [crate_name] => resolve_int_nrs(&binds, &crate_name, None, target_dir)?,
-        [crate_name, crate_feature] => {
-            resolve_int_nrs(&binds, &crate_name, Some(&crate_feature), target_dir)?
-        }
+        [crate_name] => resolve_int_nrs(&binds, &crate_name, None, target_dir.as_path())?,
+        [crate_name, crate_feature] => resolve_int_nrs(
+            &binds,
+            &crate_name,
+            Some(&crate_feature),
+            target_dir.as_path(),
+        )?,
         _ => bail!("argument passed to #[app(device = ...)] cannot be parsed"),
     };
 
@@ -116,7 +120,7 @@ fn resolve_int_nrs(
     binds: &[Ident],
     crate_name: &Ident,
     crate_feature: Option<&Ident>,
-    target_dir: PathBuf,
+    target_dir: &Path,
 ) -> Result<BTreeMap<Ident, u8>> {
     const ADHOC_FUNC_PREFIX: &str = "rtic_scope_func_";
 
@@ -166,19 +170,12 @@ fn resolve_int_nrs(
     }
 
     // Build the adhoc library, load it, and resolve all exception idents
-    //
-    // NOTE: change working directory so that our build environment does
-    // not contain any eventual `.cargo/config`.
-    assert!(env::set_current_dir(tmpdir.path()).is_ok());
-    let cc = cargo::util::config::Config::default()?;
-    let mut ws = cargo::core::Workspace::new(&tmpdir.path().join("Cargo.toml"), &cc)?;
-    ws.set_target_dir(cargo::util::Filesystem::new(target_dir));
-    let build = cargo::ops::compile(
-        &ws,
-        &cargo::ops::CompileOptions::new(&cc, cargo::core::compiler::CompileMode::Build)?,
+    let artifact = building::cargo_build(
+        tmpdir.path(),
+        &["--target-dir", target_dir.to_str().unwrap()],
+        "cdylib",
     )?;
-    assert!(build.cdylibs.len() == 1);
-    let lib = unsafe { libloading::Library::new(build.cdylibs.first().unwrap().path.as_os_str())? };
+    let lib = unsafe { libloading::Library::new(artifact.filenames.first().unwrap())? };
     Ok(binds
         .into_iter()
         .map(|b| {

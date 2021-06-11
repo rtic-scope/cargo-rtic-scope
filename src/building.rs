@@ -5,6 +5,7 @@
 
 use std::env;
 use std::io::BufReader;
+use std::path::Path;
 use std::process::{Command, Stdio};
 
 use anyhow::{bail, Result};
@@ -12,13 +13,13 @@ use cargo_metadata::{Artifact, Message};
 
 /// Ad-hoc build of target binary. Adapted from
 /// <https://github.com/rust-embedded/cargo-binutils/blob/115e26e7640337450b609d0d1d14619a1c370c7a/src/lib.rs#L402>.
-pub fn cargo_build(bin: &String) -> Result<Artifact> {
+pub fn cargo_build(crate_directory: &Path, args: &[&str], kind: &str) -> Result<Artifact> {
+    env::set_current_dir(crate_directory)?;
+
     let cargo = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let mut cargo = Command::new(cargo);
     cargo.arg("build");
-
-    cargo.arg("--bin");
-    cargo.arg(bin);
+    cargo.args(args);
 
     cargo.arg("--message-format=json");
     cargo.stdout(Stdio::piped());
@@ -39,7 +40,7 @@ pub fn cargo_build(bin: &String) -> Result<Artifact> {
     let mut target_artifact: Option<Artifact> = None;
     for message in messages {
         match message? {
-            Message::CompilerArtifact(artifact) if artifact.target.kind == ["bin"] => {
+            Message::CompilerArtifact(artifact) if artifact.target.kind == [kind] => {
                 if target_artifact.is_some() {
                     bail!("Can only have one matching artifact but found several");
                 }
