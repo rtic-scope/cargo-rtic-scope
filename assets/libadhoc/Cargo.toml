@@ -6,5 +6,9 @@ edition = "2018"
 [lib]
 crate_type = ["cdylib"]
 
+[workspace]
+# empty workspace, so that cargo does not think this crate belong to the
+# firmware which target/ we are in.
+
 [dependencies]
 cortex-m = "0.7"

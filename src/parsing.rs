@@ -14,7 +14,6 @@ use proc_macro2::{Ident, TokenStream, TokenTree};
 use quote::{format_ident, quote};
 use rtic_syntax;
 use syn;
-use tempfile;
 
 type HwExceptionNumber = u8;
 type SwExceptionNumber = usize;
@@ -126,13 +125,14 @@ fn resolve_int_nrs(
 
     // Extract adhoc source to a temporary directory and apply adhoc
     // modifications.
-    let tmpdir = tempfile::tempdir()?;
-    include_dir!("assets/libadhoc").extract(tmpdir.path())?;
+    include_dir!("assets/libadhoc")
+        .extract(target_dir)
+        .context("Failed to extract libadhoc")?;
     // Add required crate (and optional feature) as dependency
     {
         let mut manifest = fs::OpenOptions::new()
             .append(true)
-            .open(tmpdir.path().join("Cargo.toml"))?;
+            .open(target_dir.join("Cargo.toml"))?;
         let dep = format!(
             "\n{} = {{ version = \"\", features = [\"{}\"]}}\n",
             crate_name,
@@ -148,7 +148,7 @@ fn resolve_int_nrs(
         // Import PAC::Interrupt
         let mut src = fs::OpenOptions::new()
             .append(true)
-            .open(tmpdir.path().join("src/lib.rs"))?;
+            .open(target_dir.join("src/lib.rs"))?;
         let import = match crate_feature {
             Some(_) => quote!(use #crate_name::#crate_feature::Interrupt;),
             None => quote!(use #crate_name::Interrupt;),
@@ -171,8 +171,8 @@ fn resolve_int_nrs(
 
     // Build the adhoc library, load it, and resolve all exception idents
     let artifact = building::cargo_build(
-        tmpdir.path(),
-        &["--target-dir", target_dir.to_str().unwrap()],
+        target_dir,
+        &["--target-dir", target_dir.join("target/").to_str().unwrap()],
         "cdylib",
     )?;
     let lib = unsafe { libloading::Library::new(artifact.filenames.first().unwrap())? };
