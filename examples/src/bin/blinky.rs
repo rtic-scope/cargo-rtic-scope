@@ -7,7 +7,7 @@ use rtic::app;
 #[app(device = stm32f4::stm32f401, peripherals = true, dispatchers = [EXTI1])]
 mod app {
     use cortex_m::peripheral::syst::SystClkSource;
-    use rtic_trace::{self, tracing::trace};
+    use rtic_trace::{self, trace};
     use stm32f4xx_hal::stm32;
     use cortex_m::asm;
 
@@ -39,14 +39,14 @@ mod app {
         ctx.device.GPIOA.moder.modify(|_, w| w.moder5().bits(1));
 
         // configure tracing
-        rtic_trace::tracing::setup::core_peripherals(
+        rtic_trace::setup::core_peripherals(
             &mut ctx.core.DCB,
             &mut ctx.core.TPIU,
             &mut ctx.core.DWT,
             &mut ctx.core.ITM,
         );
-        rtic_trace::tracing::setup::device_peripherals(&mut ctx.device.DBGMCU);
-        rtic_trace::tracing::setup::assign_dwt_unit(&ctx.core.DWT.c[1]);
+        rtic_trace::setup::device_peripherals(&mut ctx.device.DBGMCU);
+        rtic_trace::setup::assign_dwt_unit(&ctx.core.DWT.c[1]);
 
         (
             init::LateResources {
