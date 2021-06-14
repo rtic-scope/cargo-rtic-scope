@@ -1,0 +1,19 @@
+cargo-features = ["per-package-target"]
+
+[package]
+name = "examples"
+version = "0.0.0"
+edition = "2018"
+authors = ["Viktor Sonesten <v@tmplt.dev>"]
+forced-target = "thumbv7em-none-eabihf"
+
+[dependencies]
+embedded-hal = "0.2"
+nb = "1"
+cortex-m = "0.7"
+cortex-m-rt = "0.6"
+panic-halt = "0.2"
+cortex-m-rtic =  { git = "https://github.com/rtic-rs/cortex-m-rtic" }
+rtic-trace = { git = "https://github.com/tmplt/rtic-trace" }
+stm32f4 = { version = "0.13", features = ["stm32f401", "rt"]}
+stm32f4xx-hal = { version = "0.9", features = ["rt", "stm32f401"]}
