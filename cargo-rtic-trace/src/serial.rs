@@ -29,6 +29,9 @@ mod ioctl {
 /// $ screen /dev/ttyUSB3 115200
 /// ```
 /// assuming that `device` is `/dev/ttyUSB3`.
+///
+/// TODO ensure POSIX compliance, see termios(3)
+/// TODO We are currently using line disciple 0. Is that correct?
 pub fn configure(device: &String) -> Result<fs::File> {
     let file = fs::OpenOptions::new()
         .read(true)

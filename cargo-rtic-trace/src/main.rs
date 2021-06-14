@@ -30,6 +30,10 @@ struct Opt {
     /// Don't attempt to resolve hardware or software tasks.
     #[structopt(long = "dont-resolve")]
     dont_resolve: bool,
+
+    // TODO
+    /// Flags forwarded to cargo. For example: -- --target-dir...
+    cargo_flags: Vec<String>,
 }
 
 fn main() -> Result<()> {
@@ -54,15 +58,25 @@ fn main() -> Result<()> {
     let trace_tty = serial::configure(&opt.serial)
         .with_context(|| format!("Failed to configure {}", opt.serial))?;
 
+    // Ensure we have a working cargo
+    let mut cargo = building::CargoWrapper::new(opt.cargo_flags)
+        .context("Unable to find a working cargo executable")?;
+
     // Build the wanted binary
-    let artifact = building::cargo_build(
+    let artifact = cargo.build(
         env::current_dir()?.as_path(),
-        &["--bin", opt.bin.as_str()],
+        format!("--bin {}", opt.bin),
         "bin",
     )?;
 
+    // Internally resolve the build cache used when building the
+    // artifact. It will henceforth be reused by all subsequent build
+    // operations and as the default directory for saving recorded
+    // traces.
+    cargo.resolve_target_dir(&artifact)?;
+
     // Map IRQ numbers to their respective tasks
-    let ((excps, ints), sw_tasks) = parsing::resolve_tasks(&artifact)?;
+    let ((excps, ints), sw_tasks) = parsing::resolve_tasks(&artifact, &cargo)?;
 
     println!("int: {:?}, ext: {:?}", ints, excps);
     println!("Software tasks:");
@@ -73,6 +87,10 @@ fn main() -> Result<()> {
     // Flash binary to target
     //
     // TODO use a progress bar alike cargo-flash
+    //
+    // TODO skip flash if correct bin already flashed. We check that by
+    // downloding the binary and comparing hashes (unless there is HW
+    // that does this for us)
     println!("Flashing {}...", opt.bin);
     flashing::download_file(
         &mut session,
@@ -82,13 +100,19 @@ fn main() -> Result<()> {
     .context("Unable to flash target firmware")?;
     println!("Flashed.");
 
+    // TODO sample a timestamp here
+
     // Reset the target and execute flashed binary
     println!("Resetting target...");
     let mut core = session.core(0)?;
     core.reset().context("Unable to reset target")?;
     println!("Reset.");
 
-    // TODO collect trace until some stop condition
+    // TODO open a file under blinky/target/rtic-traces here, make so
+    // that we can toss data to it async we wan to write
+
+    // TODO find target/
+
     let mut decoder = itm_decode::Decoder::new();
     for byte in trace_tty.bytes() {
         decoder.push([byte.context("Failed to read byte from trace tty")?].to_vec());

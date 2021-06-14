@@ -1,10 +1,8 @@
 use crate::building;
 
 use std::collections::BTreeMap;
-use std::env;
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use cargo_metadata::Artifact;
@@ -29,7 +27,7 @@ type SwAssocs = BTreeMap<SwExceptionNumber, Vec<syn::Ident>>;
 fn hardware_tasks(
     app: TokenStream,
     args: TokenStream,
-    target_dir: PathBuf,
+    cargo: &building::CargoWrapper,
 ) -> Result<(InternalHwAssocs, ExternalHwAssocs)> {
     let mut settings = rtic_syntax::Settings::default();
     settings.parse_binds = true;
@@ -73,12 +71,12 @@ fn hardware_tasks(
     };
     let excpt_nrs = match &device_arg[..] {
         _ if ext_binds.is_empty() => BTreeMap::<Ident, u8>::new(),
-        [crate_name] => resolve_int_nrs(&binds, &crate_name, None, target_dir.as_path())?,
+        [crate_name] => resolve_int_nrs(&binds, &crate_name, None, cargo)?,
         [crate_name, crate_feature] => resolve_int_nrs(
             &binds,
             &crate_name,
             Some(&crate_feature),
-            target_dir.as_path(),
+            cargo,
         )?,
         _ => bail!("argument passed to #[app(device = ...)] cannot be parsed"),
     };
@@ -119,14 +117,15 @@ fn resolve_int_nrs(
     binds: &[Ident],
     crate_name: &Ident,
     crate_feature: Option<&Ident>,
-    target_dir: &Path,
+    cargo: &building::CargoWrapper,
 ) -> Result<BTreeMap<Ident, u8>> {
     const ADHOC_FUNC_PREFIX: &str = "rtic_scope_func_";
 
     // Extract adhoc source to a temporary directory and apply adhoc
     // modifications.
+    let target_dir = cargo.target_dir().unwrap().join("cargo-rtic-trace-libadhoc");
     include_dir!("assets/libadhoc")
-        .extract(target_dir)
+        .extract(&target_dir)
         .context("Failed to extract libadhoc")?;
     // Add required crate (and optional feature) as dependency
     {
@@ -170,9 +169,9 @@ fn resolve_int_nrs(
     }
 
     // Build the adhoc library, load it, and resolve all exception idents
-    let artifact = building::cargo_build(
-        target_dir,
-        &["--target-dir", target_dir.join("target/").to_str().unwrap()],
+    let artifact = cargo.build(
+        &target_dir,
+        "".to_string(),
         "cdylib",
     )?;
     let lib = unsafe { libloading::Library::new(artifact.filenames.first().unwrap())? };
@@ -278,6 +277,7 @@ fn software_tasks(app: TokenStream) -> Result<SwAssocs> {
 
 pub fn resolve_tasks(
     artifact: &Artifact,
+    cargo: &building::CargoWrapper
 ) -> Result<((ExternalHwAssocs, InternalHwAssocs), SwAssocs)> {
     // parse the RTIC app from the source file
     let src = fs::read_to_string(&artifact.target.src_path)
@@ -304,29 +304,7 @@ pub fn resolve_tasks(
     };
     let app = rtic_app.collect::<TokenStream>();
 
-    // Find a suitable target directory from --bin which we'll reuse
-    // for building the adhoc library, unless CARGO_TARGET_DIR is
-    // set.
-    let target_dir = if let Ok(target_dir) = env::var("CARGO_TARGET_DIR") {
-        PathBuf::from(target_dir)
-    } else {
-        // Adhoc will end up under some target/thumbv7em-.../
-        // which is technically incorrect, but scanning for a
-        // "target/" in the path is unstable if CARGO_TARGET_DIR is
-        // set, which may not contain a "target/". Our reuse of the
-        // directory is nevertheless commented with a verbose
-        // directory name.
-        let mut path = artifact.executable.clone().unwrap();
-        path.pop();
-        path.push("rtic-trace-adhoc-target");
-        // NOTE(_all): we do not necessarily need to create all
-        // directories, but we do not want to fail if the directory
-        // exists.
-        fs::create_dir_all(&path).unwrap();
-        path
-    };
-
-    let (ints, excps) = hardware_tasks(app.clone(), args, target_dir)?;
+    let (ints, excps) = hardware_tasks(app.clone(), args, cargo)?;
     let sw_tasks = software_tasks(app)?;
 
     Ok(((excps, ints), sw_tasks))

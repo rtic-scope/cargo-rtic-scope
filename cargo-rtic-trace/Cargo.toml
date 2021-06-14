@@ -20,6 +20,7 @@ nix = "0.21.0"
 include_dir = { git = "https://github.com/tmplt/include_dir.git", branch = "feat/truncate" }
 libloading = "0.7"
 rtic-syntax = { git = "https://github.com/rtic-rs/rtic-syntax.git" }
+regex = "1"
 
 [dependencies.serialport]
 version = "4"
