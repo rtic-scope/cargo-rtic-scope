@@ -51,7 +51,8 @@ fn main() -> Result<()> {
     let mut session = probe
         .attach("stm32f401re")
         .context("Unable to attach to stm32f401re")?;
-    let mut trace_tty = serial::configure(opt.serial)?;
+    let trace_tty = serial::configure(&opt.serial)
+        .with_context(|| format!("Failed to configure {}", opt.serial))?;
 
     // Build the wanted binary
     let artifact = building::cargo_build(
@@ -88,14 +89,9 @@ fn main() -> Result<()> {
     println!("Reset.");
 
     // TODO collect trace until some stop condition
-    // TODO start collecting before target is reset
     let mut decoder = itm_decode::Decoder::new();
-    let mut buf: [u8; 256] = [0; 256];
-    while let Ok(n) = trace_tty.read(&mut buf) {
-        println!("I read {} bytes", n);
-        decoder.push(buf[..n].to_vec());
-        buf = [0; 256];
-
+    for byte in trace_tty.bytes() {
+        decoder.push([byte.context("Failed to read byte from trace tty")?].to_vec());
         loop {
             match decoder.pull() {
                 Ok(None) => break,

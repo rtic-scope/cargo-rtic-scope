@@ -29,7 +29,7 @@ mod ioctl {
 /// $ screen /dev/ttyUSB3 115200
 /// ```
 /// assuming that `device` is `/dev/ttyUSB3`.
-pub fn configure(device: String) -> Result<fs::File> {
+pub fn configure(device: &String) -> Result<fs::File> {
     let file = fs::OpenOptions::new()
         .read(true)
         .open(&device)
