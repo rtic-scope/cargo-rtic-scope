@@ -76,7 +76,10 @@ fn main() -> Result<()> {
     cargo.resolve_target_dir(&artifact)?;
 
     // Map IRQ numbers to their respective tasks
-    let ((excps, ints), sw_tasks) = parsing::resolve_tasks(&artifact, &cargo)?;
+    let ((excps, ints), sw_tasks) = parsing::TaskResolver::new(&artifact, &cargo)
+        .context("Failed to parse RTIC application source file")?
+        .resolve()
+        .context("Failed to resolve tasks")?;
 
     println!("int: {:?}, ext: {:?}", ints, excps);
     println!("Software tasks:");
