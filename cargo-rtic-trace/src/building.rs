@@ -18,7 +18,13 @@ pub struct CargoWrapper {
 impl CargoWrapper {
     /// Checks if cargo exists in PATH and returns it wrapped in a Command.
     fn cmd() -> Result<Command> {
-        let cargo = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+        // XXX cargo sets CARGO to an absolute
+        // ~/.rustup/toolchains/.../bin/cargo when starting a
+        // sub-command. Until
+        // <https://github.com/rust-lang/cargo/issues/9301> is
+        // stabilized, we need to call into +nightly for cargo-config.
+        // So for now we'll disregard it.
+        let cargo = "cargo"; // env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
         let mut cargo = Command::new(cargo);
         let _output = cargo
             .output()
