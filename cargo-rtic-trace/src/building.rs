@@ -203,6 +203,16 @@ impl CargoWrapper {
             cargo.current_dir(crate_root);
         }
 
+        // TODO replace with
+        //
+        //     println!("Running: {} {}", cargo.get_program(), cargo.get_args())
+        //
+        // when feature(command_access) is stabilized. See
+        // <https://github.com/rust-lang/rust/issues/44434>.
+        //
+        // Perhaps we should mimic cargo. cargo install prints a green
+        // "Installing". We could have a a green "Building" and then a
+        // "Tracing" when we start with that.
         eprintln!("{:?}", cargo);
 
         let mut child = cargo.spawn()?;
