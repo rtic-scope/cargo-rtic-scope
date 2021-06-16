@@ -64,7 +64,7 @@ fn main() -> Result<()> {
 
     // Build the wanted binary
     let artifact = cargo.build(
-        env::current_dir()?.as_path(),
+        &env::current_dir()?,
         format!("--bin {}", opt.bin),
         "bin",
     )?;

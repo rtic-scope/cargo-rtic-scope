@@ -1,7 +1,4 @@
-//! Handle artifact building
-//!
-//! TODO: properly handle edge-cases. See the original cargo-binutils
-//! again.
+//! Handle artifact building using cargo.
 
 use std::env;
 use std::io::BufReader;
@@ -17,18 +14,53 @@ pub struct CargoWrapper {
     target_dir: Option<String>,
 }
 
+/// A functioality wrapper around subproccess calls to cargo in PATH.
 impl CargoWrapper {
+    /// Checks if cargo exists in PATH and returns it wrapped in a Command.
     fn cmd() -> Result<Command> {
-        // check if cargo exists
         let cargo = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
         let mut cargo = Command::new(cargo);
-        let _output = cargo.output().with_context(|| format!("Unable to execute {:?}", cargo))?;
+        let _output = cargo
+            .output()
+            .with_context(|| format!("Unable to execute {:?}", cargo))?;
 
         Ok(cargo)
     }
 
+    /// Creates a new wrapper instance after ensuring that a cargo
+    /// executable is available in `PATH`. Can be overridden via the
+    /// `CARGO` environment variable. Passed `build_options` is expected
+    /// to be a set off `cargo build` flags. These are applied in all
+    /// `build` calls.
     pub fn new(build_options: Vec<String>) -> Result<Self> {
-        let _ = Self::cmd()?;
+        // Early check if cargo exists. Because PATH is unlikely to
+        // change, a Command instance could potentially be passed around
+        // instead of recreated whenever one is needed, but it is not
+        // possible to reset the arguments of a Command. We may in any
+        // case want to consider a small refactor regarding this, when a
+        // better solution is found.
+        let mut cargo = Self::cmd()?;
+
+        // Only require +nightly toolchain if build cache isn't
+        // otherwise set explicitly.
+        //
+        // TODO fix in production. `cargo rtic-trace` calls
+        // /home/tmplt/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo
+        // which does not have +nightly.
+        if env::var_os("CARGO_BUILD_DIR").is_none()
+            && build_options
+                .iter()
+                .find(|opt| opt.as_str() == "--target-dir")
+                .is_none()
+            && !cargo
+                .args("+nightly -Z unstable-features config get --version".split_whitespace())
+                .output()
+                .unwrap() // safe, output was tested in Self::cmd
+                .status
+                .success()
+        {
+            bail!("Neither CARGO_BUILD_DIR nor --target-dir was set. A nightly toolchain is then required to resolve the build cache until <https://github.com/rust-lang/cargo/issues/9301> is stabilized. Install one via rustup install nightly. The following check failed: {:?}", cargo);
+        }
 
         Ok(CargoWrapper {
             build_options,
@@ -36,8 +68,9 @@ impl CargoWrapper {
         })
     }
 
-    /// Finds the configured build cache (usually a `target/` in the crate
-    /// root) as reported by cargo.
+    /// Finds the configured build cache (usually a `target/` in the
+    /// crate root) as reported by cargo. Any subsequent calls to
+    /// `build` will reuse this build cache.
     ///
     /// TODO support sccache?
     pub fn resolve_target_dir(&mut self, artifact: &Artifact) -> Result<()> {
@@ -125,13 +158,17 @@ impl CargoWrapper {
             }
         }
 
-        bail!("Unable to resolve target directory");
+        bail!("Unable to resolve target directory. Cannot continue.");
     }
 
     pub fn target_dir(&self) -> Option<PathBuf> {
         self.target_dir.as_ref().map(|p| PathBuf::from(p))
     }
 
+    /// Calls `cargo build` within the speficied `crate_root` with the
+    /// additional `args` build options and returns the singular
+    /// `expected_artifact_kind` (`bin`, `lib`, `cdylib`, etc.) if it is
+    /// generated.
     pub fn build(
         &self,
         crate_root: &Path,
@@ -171,8 +208,8 @@ impl CargoWrapper {
         let mut child = cargo.spawn()?;
         let stdout = BufReader::new(child.stdout.take().expect("Pipe to cargo process failed"));
 
-        // Note: We call `collect` to ensure we don't block stdout which
-        // could prevent the process from exiting
+        // NOTE(collect) ensure we don't block stdout which could
+        // prevent the process from exiting
         let messages = Message::parse_stream(stdout).collect::<Vec<_>>();
 
         let status = child.wait()?;
