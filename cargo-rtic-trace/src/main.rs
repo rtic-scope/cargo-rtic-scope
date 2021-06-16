@@ -48,13 +48,13 @@ fn main() -> Result<()> {
     let probe = probes[0].open().context("Unable to open first probe")?;
     let mut session = probe
         .attach("stm32f401re")
-        .context("Unable to attach to stm32f401re")?;
+        .context("Failed to attach to stm32f401re")?;
     let trace_tty = serial::configure(&opt.serial)
         .with_context(|| format!("Failed to configure {}", opt.serial))?;
 
     // Ensure we have a working cargo
     let mut cargo = building::CargoWrapper::new(opt.cargo_flags)
-        .context("Unable to setup cargo")?;
+        .context("Failed to setup cargo")?;
 
     // Build the wanted binary
     let artifact = cargo.build(
@@ -94,7 +94,7 @@ fn main() -> Result<()> {
         &artifact.executable.unwrap(),
         flashing::Format::Elf,
     )
-    .context("Unable to flash target firmware")?;
+    .context("Failed to flash target firmware")?;
     println!("Flashed.");
 
     // TODO sample a timestamp here
