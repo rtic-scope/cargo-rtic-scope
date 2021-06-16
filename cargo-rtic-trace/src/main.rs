@@ -5,15 +5,16 @@
 
 use std::env;
 use std::io::Read;
+use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
-use itm_decode::{self, DecoderState};
 use probe_rs::{flashing, Probe};
 use structopt::StructOpt;
 
 mod building;
 mod parsing;
 mod serial;
+mod tracing;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "cargo-rtic-trace", about = "TODO")]
@@ -26,6 +27,21 @@ struct Opt {
     /// Serial device over which trace stream is expected.
     #[structopt(long = "serial")]
     serial: String,
+
+    /// Output directory for recorded trace streams. By default, the
+    /// build chache of <bin> is used (usually ./target/).
+    #[structopt(long = "output", short = "o", parse(from_os_str))]
+    trace_dir: Option<PathBuf>,
+
+    // TODO utilize
+    /// Arbitrary comment that describes the trace. Currently not in
+    /// use.
+    #[structopt(long = "comment", short = "c")]
+    trace_comment: Option<String>,
+
+    /// Remove all previous traces from <trace-dir>.
+    #[structopt(long = "clear-traces")]
+    remove_prev_traces: bool,
 
     /// Flags forwarded to cargo. For example: -- --target-dir...
     cargo_flags: Vec<String>,
@@ -53,21 +69,26 @@ fn main() -> Result<()> {
         .with_context(|| format!("Failed to configure {}", opt.serial))?;
 
     // Ensure we have a working cargo
-    let mut cargo = building::CargoWrapper::new(opt.cargo_flags)
-        .context("Failed to setup cargo")?;
+    let mut cargo =
+        building::CargoWrapper::new(opt.cargo_flags).context("Failed to setup cargo")?;
 
     // Build the wanted binary
-    let artifact = cargo.build(
-        &env::current_dir()?,
-        format!("--bin {}", opt.bin),
-        "bin",
-    )?;
+    let artifact = cargo.build(&env::current_dir()?, format!("--bin {}", opt.bin), "bin")?;
 
     // Internally resolve the build cache used when building the
     // artifact. It will henceforth be reused by all subsequent build
     // operations and as the default directory for saving recorded
     // traces.
     cargo.resolve_target_dir(&artifact)?;
+
+    // TODO make this into Sink::generate().remove_old(), etc.
+    let mut trace_sink = tracing::Sink::generate(
+        &artifact,
+        &opt.trace_dir
+            .unwrap_or(cargo.target_dir().unwrap().join("rtic-traces")),
+        opt.remove_prev_traces,
+    )
+    .context("Failed to generate trace sink file")?;
 
     // Map IRQ numbers to their respective tasks
     let ((excps, ints), sw_tasks) = parsing::TaskResolver::new(&artifact, &cargo)
@@ -97,35 +118,24 @@ fn main() -> Result<()> {
     .context("Failed to flash target firmware")?;
     println!("Flashed.");
 
-    // TODO sample a timestamp here
+    // XXX must be done before resetting target
+    trace_sink.sample_reset_timestamp()?;
 
-    // Reset the target and execute flashed binary
-    println!("Resetting target...");
-    let mut core = session.core(0)?;
-    core.reset().context("Unable to reset target")?;
-    println!("Reset.");
-
-    // TODO open a file under blinky/target/rtic-traces here, make so
-    // that we can toss data to it async we wan to write
-
-    // TODO find target/
-
-    let mut decoder = itm_decode::Decoder::new();
-    for byte in trace_tty.bytes() {
-        decoder.push([byte.context("Failed to read byte from trace tty")?].to_vec());
-        loop {
-            match decoder.pull() {
-                Ok(None) => break,
-                Ok(Some(packet)) => println!("{:?}", packet),
-                Err(e) => {
-                    println!("Error: {:?}", e);
-                    decoder.state = DecoderState::Header;
-                }
-            }
-        }
+    // XXX Time to execute the below block should be predictable. We
+    // want to do as little as possible between timestamping and
+    // processing the trace bytes.
+    {
+        // Reset the target and execute flashed binary
+        println!("Resetting target...");
+        let mut core = session.core(0)?;
+        core.reset().context("Unable to reset target")?;
+        println!("Reset.");
+        println!("Tracing...");
     }
 
-    // TODO save trace somewhere for offline analysis.
+    for byte in trace_tty.bytes() {
+        trace_sink.push(byte.context("Failed to read byte from trace tty")?)?;
+    }
 
     Ok(())
 }
