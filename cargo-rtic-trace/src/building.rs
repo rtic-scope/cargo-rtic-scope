@@ -11,7 +11,7 @@ use regex::Regex;
 
 pub struct CargoWrapper {
     build_options: Vec<String>,
-    target_dir: Option<String>,
+    target_dir: Option<PathBuf>,
 }
 
 /// A functioality wrapper around subproccess calls to cargo in PATH.
@@ -32,7 +32,7 @@ impl CargoWrapper {
     /// `CARGO` environment variable. Passed `build_options` is expected
     /// to be a set off `cargo build` flags. These are applied in all
     /// `build` calls.
-    pub fn new(build_options: Vec<String>) -> Result<Self> {
+    pub fn new(mut build_options: Vec<String>) -> Result<Self> {
         // Early check if cargo exists. Because PATH is unlikely to
         // change, a Command instance could potentially be passed around
         // instead of recreated whenever one is needed, but it is not
@@ -41,17 +41,29 @@ impl CargoWrapper {
         // better solution is found.
         let mut cargo = Self::cmd()?;
 
+        let target_dir =
+            if let Some(pos) = build_options.iter().position(|opt| opt == "--target-dir") {
+                let path = PathBuf::from(if let Some(path) = build_options.get(pos + 1) {
+                    path
+                } else {
+                    bail!("--target-dir passed, but without argument");
+                })
+                .canonicalize()?;
+                build_options.remove(pos + 1);
+                build_options.remove(pos);
+                Some(path)
+            } else {
+                None
+            };
+
         // Only require +nightly toolchain if build cache isn't
         // otherwise set explicitly.
         //
         // TODO fix in production. `cargo rtic-trace` calls
         // /home/tmplt/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo
         // which does not have +nightly.
-        if env::var_os("CARGO_BUILD_DIR").is_none()
-            && build_options
-                .iter()
-                .find(|opt| opt.as_str() == "--target-dir")
-                .is_none()
+        if env::var_os("CARGO_TARGET_DIR").is_none()
+            && target_dir.is_none()
             && !cargo
                 .args("+nightly -Z unstable-features config get --version".split_whitespace())
                 .output()
@@ -59,12 +71,12 @@ impl CargoWrapper {
                 .status
                 .success()
         {
-            bail!("Neither CARGO_BUILD_DIR nor --target-dir was set. A nightly toolchain is then required to resolve the build cache until <https://github.com/rust-lang/cargo/issues/9301> is stabilized. Install one via rustup install nightly. The following check failed: {:?}", cargo);
+            bail!("Neither CARGO_TARGET_DIR nor --target-dir was set. A nightly toolchain is then required to resolve the build cache until <https://github.com/rust-lang/cargo/issues/9301> is stabilized. Install one via rustup install nightly. The following check failed: {:?}", cargo);
         }
 
         Ok(CargoWrapper {
             build_options,
-            target_dir: None,
+            target_dir,
         })
     }
 
@@ -76,27 +88,14 @@ impl CargoWrapper {
     pub fn resolve_target_dir(&mut self, artifact: &Artifact) -> Result<()> {
         type ResolveType = Result<Option<String>>;
 
+        if self.target_dir().is_some() {
+            return Ok(());
+        }
+
         // first, check env variable which has highest prio
         let via_environment = || -> ResolveType {
-            if let Some(val) = env::var_os("CARGO_BUILD_DIR") {
+            if let Some(val) = env::var_os("CARGO_TARGET_DIR") {
                 Ok(Some(val.to_str().unwrap().to_string()))
-            } else {
-                Ok(None)
-            }
-        };
-
-        // then, check cargo args for --target-dir
-        //
-        // NOTE(hoisted) closure may not borrow self
-        let build_options = &self.build_options;
-        let via_cargo_args = || -> ResolveType {
-            let mut iter = build_options.iter();
-            if let Some(_) = iter.find(|opt| opt.as_str() == "--target-dir") {
-                Ok(Some(
-                    iter.next()
-                        .context("--target-dir passed with no argument")?
-                        .to_string(),
-                ))
             } else {
                 Ok(None)
             }
@@ -144,16 +143,20 @@ impl CargoWrapper {
         };
 
         // Try to resolve the target directory, in order of method
-        // priority
+        // precedence. See
+        // <https://doc.rust-lang.org/cargo/guide/build-cache.html>.
+        //
+        // NOTE from local tests, --target-dir have precedence over
+        // environmental variables.
         let methods: Vec<Box<dyn Fn() -> ResolveType>> = vec![
+            // --target-dir is checked in Self::new
             Box::new(via_environment),
-            Box::new(via_cargo_args),
             Box::new(via_cargo_config),
             Box::new(via_artifact_path),
         ];
         for method in methods {
             if let Ok(Some(path)) = method() {
-                self.target_dir = Some(path);
+                self.set_target_dir(PathBuf::from(path))?;
                 return Ok(());
             }
         }
@@ -161,8 +164,17 @@ impl CargoWrapper {
         bail!("Unable to resolve target directory. Cannot continue.");
     }
 
-    pub fn target_dir(&self) -> Option<PathBuf> {
-        self.target_dir.as_ref().map(|p| PathBuf::from(p))
+    fn set_target_dir(&mut self, target_dir: PathBuf) -> Result<()> {
+        self.target_dir = Some(
+            target_dir
+                .canonicalize()
+                .with_context(|| format!("Failed to canonicalize {}", target_dir.display()))?,
+        );
+        Ok(())
+    }
+
+    pub fn target_dir(&self) -> Option<&PathBuf> {
+        self.target_dir.as_ref()
     }
 
     /// Calls `cargo build` within the speficied `crate_root` with the
@@ -177,11 +189,21 @@ impl CargoWrapper {
     ) -> Result<Artifact> {
         let mut cargo = Self::cmd()?;
         cargo.arg("build");
-        cargo.args(&self.build_options);
+
+        assert!(!args.contains("--target-dir"));
         cargo.args(args.split_whitespace());
 
-        if let Some(target_dir) = &self.target_dir {
-            cargo.args(format!("--target-dir {}", target_dir).split_whitespace());
+        assert!(self
+            .build_options
+            .iter()
+            .find(|opt| opt.as_str() == "--target-dir")
+            .is_none());
+        cargo.args(&self.build_options);
+
+        if let Some(target_dir) = self.target_dir() {
+            assert!(target_dir.is_absolute());
+            cargo.arg("--target-dir");
+            cargo.arg(target_dir);
         }
 
         cargo.arg("--message-format=json");
@@ -191,11 +213,11 @@ impl CargoWrapper {
         // directory. We obviously need it when we build the target
         // application, but it breaks libadhoc build.
         if expected_artifact_kind == "cdylib" {
-            cargo.current_dir(env::temp_dir());
+            cargo.current_dir(env::temp_dir()); // XXX what if /.cargo/config?
             cargo.args(
                 format!(
                     "--manifest-path {}",
-                    crate_root.join("Cargo.toml").display()
+                    crate_root.canonicalize()?.join("Cargo.toml").display()
                 )
                 .split_whitespace(),
             );

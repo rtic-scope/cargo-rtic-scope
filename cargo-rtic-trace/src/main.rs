@@ -54,7 +54,7 @@ fn main() -> Result<()> {
 
     // Ensure we have a working cargo
     let mut cargo = building::CargoWrapper::new(opt.cargo_flags)
-        .context("Unable to find a working cargo executable")?;
+        .context("Unable to setup cargo")?;
 
     // Build the wanted binary
     let artifact = cargo.build(
