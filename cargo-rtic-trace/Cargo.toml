@@ -15,7 +15,6 @@ syn = "1"
 proc-macro2 = "1"
 quote = "1"
 probe-rs = "0.10"
-itm-decode = "0.3"
 nix = "0.21.0"
 include_dir = { git = "https://github.com/tmplt/include_dir.git", branch = "feat/truncate" }
 libloading = "0.7"
@@ -25,3 +24,15 @@ regex = "1"
 [dependencies.serialport]
 version = "4"
 default-features = false # we don't need libudev functionalities
+
+[dependencies.git2]
+version = "0.13"
+default-features = false
+
+[dependencies.chrono]
+version = "0.4"
+features = ["serde"]
+
+[dependencies.itm-decode]
+version = "0.3"
+features = ["serde"]

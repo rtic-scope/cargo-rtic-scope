@@ -30,8 +30,7 @@ pub struct TaskResolver<'a> {
 impl<'a> TaskResolver<'a> {
     pub fn new(artifact: &Artifact, cargo: &'a CargoWrapper) -> Result<Self> {
         // parse the RTIC app from the source file
-        let src = fs::read_to_string(&artifact.target.src_path)
-            .context("Failed to open file")?;
+        let src = fs::read_to_string(&artifact.target.src_path).context("Failed to open file")?;
         let mut rtic_app = syn::parse_str::<TokenStream>(&src)
             .context("Failed to tokenize file")?
             .into_iter()
