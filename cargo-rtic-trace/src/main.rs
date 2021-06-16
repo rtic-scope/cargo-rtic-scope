@@ -22,16 +22,11 @@ struct Opt {
     #[structopt(long = "bin")]
     bin: String,
 
-    // TODO handle --example (or forward unknown arguments to rustc)
+    // TODO handle --example
     /// Serial device over which trace stream is expected.
     #[structopt(long = "serial")]
     serial: String,
 
-    /// Don't attempt to resolve hardware or software tasks.
-    #[structopt(long = "dont-resolve")]
-    dont_resolve: bool,
-
-    // TODO
     /// Flags forwarded to cargo. For example: -- --target-dir...
     cargo_flags: Vec<String>,
 }
@@ -50,7 +45,6 @@ fn main() -> Result<()> {
     if probes.is_empty() {
         bail!("No supported target probes found");
     }
-    println!("Opening first probe and attaching...");
     let probe = probes[0].open().context("Unable to open first probe")?;
     let mut session = probe
         .attach("stm32f401re")
