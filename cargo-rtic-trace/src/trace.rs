@@ -1,6 +1,6 @@
 use std::fs::{self, File};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use cargo_metadata::Artifact;
@@ -15,14 +15,17 @@ pub struct Sink {
 }
 
 impl Sink {
+    const TRACE_FILE_EXT: &'static str = ".trace";
+
     pub fn generate(
         artifact: &Artifact,
         trace_dir: &PathBuf,
         remove_prev_traces: bool,
     ) -> Result<Self> {
         if remove_prev_traces {
-            // TODO only remove .trace files
-            fs::remove_dir_all(trace_dir)?;
+            for trace in Self::list_trace_files(trace_dir)? {
+                fs::remove_file(trace).context("Failed to remove previous trace file")?;
+            }
         }
 
         // generate a short descroption on the format
@@ -37,8 +40,11 @@ impl Sink {
             ))?;
         let date = Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
         let path = trace_dir.join(format!(
-            "{}-g{}-{}.trace",
-            artifact.target.name, git_shortdesc, date
+            "{}-g{}-{}.{}",
+            artifact.target.name,
+            git_shortdesc,
+            date,
+            Self::TRACE_FILE_EXT,
         ));
 
         fs::create_dir_all(trace_dir)?;
@@ -51,6 +57,29 @@ impl Sink {
             file,
             decoder: Decoder::new(),
         })
+    }
+
+    /// Greps `*.trace` in given path.
+    fn list_trace_files(path: &Path) -> Result<Vec<PathBuf>> {
+        Ok(fs::read_dir(path)
+            .context("Failed to read trace directory")?
+            // we only care about files we can access
+            .map(|entry| entry.unwrap())
+            // grep *.trace
+            .filter_map(|entry| {
+                if entry.file_type().unwrap().is_file()
+                    && entry
+                        .file_name()
+                        .to_str()
+                        .unwrap()
+                        .ends_with(Self::TRACE_FILE_EXT)
+                {
+                    Some(entry.path())
+                } else {
+                    None
+                }
+            })
+            .collect())
     }
 
     /// Attempts to find a git repository starting from the given path
