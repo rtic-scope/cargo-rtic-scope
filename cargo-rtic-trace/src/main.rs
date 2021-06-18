@@ -11,10 +11,10 @@ use anyhow::{bail, Context, Result};
 use probe_rs::{flashing, Probe};
 use structopt::StructOpt;
 
-mod building;
-mod parsing;
+mod build;
+mod parse;
 mod serial;
-mod tracing;
+mod trace;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "cargo-rtic-trace", about = "TODO")]
@@ -70,7 +70,7 @@ fn main() -> Result<()> {
 
     // Ensure we have a working cargo
     let mut cargo =
-        building::CargoWrapper::new(opt.cargo_flags).context("Failed to setup cargo")?;
+        build::CargoWrapper::new(opt.cargo_flags).context("Failed to setup cargo")?;
 
     // Build the wanted binary
     let artifact = cargo.build(&env::current_dir()?, format!("--bin {}", opt.bin), "bin")?;
@@ -82,7 +82,7 @@ fn main() -> Result<()> {
     cargo.resolve_target_dir(&artifact)?;
 
     // TODO make this into Sink::generate().remove_old(), etc.
-    let mut trace_sink = tracing::Sink::generate(
+    let mut trace_sink = trace::Sink::generate(
         &artifact,
         &opt.trace_dir
             .unwrap_or(cargo.target_dir().unwrap().join("rtic-traces")),
@@ -91,7 +91,7 @@ fn main() -> Result<()> {
     .context("Failed to generate trace sink file")?;
 
     // Map IRQ numbers to their respective tasks
-    let ((excps, ints), sw_tasks) = parsing::TaskResolver::new(&artifact, &cargo)
+    let ((excps, ints), sw_tasks) = parse::TaskResolver::new(&artifact, &cargo)
         .context("Failed to parse RTIC application source file")?
         .resolve()
         .context("Failed to resolve tasks")?;

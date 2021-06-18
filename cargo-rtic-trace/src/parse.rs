@@ -1,4 +1,4 @@
-use crate::building::CargoWrapper;
+use crate::build::CargoWrapper;
 
 use std::collections::BTreeMap;
 use std::fs;
