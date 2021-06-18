@@ -119,7 +119,7 @@ fn main() -> Result<()> {
     println!("Flashed.");
 
     // XXX must be done before resetting target
-    trace_sink.sample_reset_timestamp()?;
+    trace_sink.sample_reset_timestamp();
 
     // XXX Time to execute the below block should be predictable. We
     // want to do as little as possible between timestamping and
@@ -132,6 +132,8 @@ fn main() -> Result<()> {
         println!("Reset.");
         println!("Tracing...");
     }
+
+    trace_sink.write_reset_timestamp()?;
 
     for byte in trace_tty.bytes() {
         trace_sink.push(byte.context("Failed to read byte from trace tty")?)?;

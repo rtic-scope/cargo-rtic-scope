@@ -74,24 +74,24 @@ impl Sink {
         })
     }
 
-    pub fn sample_reset_timestamp(&mut self) -> Result<()> {
+    pub fn sample_reset_timestamp(&mut self) {
+        assert!(self.timestamp.is_none());
         self.timestamp = Some(Local::now());
+    }
 
-        // serialize timestamp to file
-        //
-        // TODO Make another thread do this work. We want the time
-        // between this timestamp and the target reset to be
-        // predictable.
-        let json = serde_json::to_string(&self.timestamp.unwrap())?;
-        self.file.write_all(json.as_bytes())?;
+    pub fn write_reset_timestamp(&mut self) -> Result<()> {
+        if let Some(ts) = self.timestamp {
+            let json = serde_json::to_string(&ts)?;
+            self.file.write_all(json.as_bytes())?;
+            self.timestamp = None;
 
-        Ok(())
+            Ok(())
+        } else {
+            bail!("No reset timestamp to serialize");
+        }
     }
 
     pub fn push(&mut self, byte: u8) -> Result<()> {
-        // TODO shared ring-buffer between threads so that main thread
-        // spends as much time as possible reading serial.
-
         self.decoder.push([byte].to_vec());
 
         // decode available packets and serialize to file
