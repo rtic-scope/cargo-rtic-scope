@@ -25,28 +25,9 @@ impl Sink {
             fs::remove_dir_all(trace_dir)?;
         }
 
-        // Try to find the git root recursively backwards from the
-        // artifact target source path.
-        let repo = {
-            let mut path = artifact.target.src_path.clone();
-            #[allow(unused_assignments)]
-            let mut repo = None;
-            loop {
-                repo = Repository::open(&path).ok();
-                if repo.is_some() {
-                    break;
-                }
-
-                if !path.pop() {
-                    bail!("Failed to find a git root");
-                }
-            }
-
-            repo.unwrap() // safe
-        };
-
         // generate a short descroption on the format
         // "blinky-gbaadf00-dirty-2021-06-16T17:13:16.trace"
+        let repo = Self::find_git_repo(artifact.target.src_path.clone())?;
         let git_shortdesc = repo
             .describe(&DescribeOptions::new().show_commit_oid_as_fallback(true))?
             .format(Some(
@@ -70,6 +51,23 @@ impl Sink {
             file,
             decoder: Decoder::new(),
         })
+    }
+
+    /// Attempts to find a git repository starting from the given path
+    /// and walking upwards until / is hit.
+    fn find_git_repo(mut path: PathBuf) -> Result<Repository> {
+        loop {
+            match Repository::open(&path) {
+                Ok(repo) => return Ok(repo),
+                Err(_) => {
+                    if path.pop() {
+                        continue;
+                    }
+
+                    bail!("Failed to find git repo root");
+                }
+            }
+        }
     }
 
     /// Samples a timestamp after which the target is immidiately reset.
