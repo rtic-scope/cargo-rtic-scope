@@ -118,23 +118,18 @@ fn main() -> Result<()> {
     .context("Failed to flash target firmware")?;
     println!("Flashed.");
 
-    // XXX must be done before resetting target
-    trace_sink.sample_reset_timestamp();
-
-    // XXX Time to execute the below block should be predictable. We
-    // want to do as little as possible between timestamping and
-    // processing the trace bytes.
-    {
-        // Reset the target and execute flashed binary
+    // Sample the timestamp of target reset
+    trace_sink.timestamp_reset(|| {
+        // Reset the target to  execute flashed binary
         println!("Resetting target...");
         let mut core = session.core(0)?;
         core.reset().context("Unable to reset target")?;
         println!("Reset.");
-        println!("Tracing...");
-    }
 
-    trace_sink.write_reset_timestamp()?;
+        Ok(())
+    })?;
 
+    println!("Tracing...");
     for byte in trace_tty.bytes() {
         trace_sink.push(byte.context("Failed to read byte from trace tty")?)?;
     }

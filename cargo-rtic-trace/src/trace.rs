@@ -12,7 +12,6 @@ use serde_json;
 pub struct Sink {
     file: File,
     decoder: Decoder,
-    timestamp: Option<DateTime<chrono::Local>>,
 }
 
 impl Sink {
@@ -70,25 +69,22 @@ impl Sink {
         Ok(Sink {
             file,
             decoder: Decoder::new(),
-            timestamp: None,
         })
     }
 
-    pub fn sample_reset_timestamp(&mut self) {
-        assert!(self.timestamp.is_none());
-        self.timestamp = Some(Local::now());
-    }
+    /// Samples a timestamp after which the target is immidiately reset.
+    pub fn timestamp_reset<F>(&mut self, reset_fun: F) -> Result<()>
+    where
+        F: FnOnce() -> Result<()>,
+    {
+        let ts = Local::now();
 
-    pub fn write_reset_timestamp(&mut self) -> Result<()> {
-        if let Some(ts) = self.timestamp {
-            let json = serde_json::to_string(&ts)?;
-            self.file.write_all(json.as_bytes())?;
-            self.timestamp = None;
+        reset_fun().context("Failed to reset target")?;
 
-            Ok(())
-        } else {
-            bail!("No reset timestamp to serialize");
-        }
+        let json = serde_json::to_string(&ts)?;
+        self.file.write_all(json.as_bytes())?;
+
+        Ok(())
     }
 
     pub fn push(&mut self, byte: u8) -> Result<()> {
