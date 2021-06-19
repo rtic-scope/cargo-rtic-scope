@@ -69,8 +69,7 @@ fn main() -> Result<()> {
         .with_context(|| format!("Failed to configure {}", opt.serial))?;
 
     // Ensure we have a working cargo
-    let mut cargo =
-        build::CargoWrapper::new(opt.cargo_flags).context("Failed to setup cargo")?;
+    let mut cargo = build::CargoWrapper::new(opt.cargo_flags).context("Failed to setup cargo")?;
 
     // Build the wanted binary
     let artifact = cargo.build(&env::current_dir()?, format!("--bin {}", opt.bin), "bin")?;
@@ -90,15 +89,15 @@ fn main() -> Result<()> {
     )
     .context("Failed to generate trace sink file")?;
 
-    // Map IRQ numbers to their respective tasks
-    let ((excps, ints), sw_tasks) = parse::TaskResolver::new(&artifact, &cargo)
+    // Map IRQ numbers and DWT matches to their respective RTIC tasks
+    let maps = parse::TaskResolver::new(&artifact, &cargo)
         .context("Failed to parse RTIC application source file")?
         .resolve()
         .context("Failed to resolve tasks")?;
 
-    println!("int: {:?}, ext: {:?}", ints, excps);
+    println!("int: {:?}, ext: {:?}", maps.interrupts, maps.exceptions);
     println!("Software tasks:");
-    for (k, v) in sw_tasks {
+    for (k, v) in maps.sw_assocs {
         println!("({}, {:?})", k, v);
     }
 

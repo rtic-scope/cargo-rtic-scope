@@ -21,6 +21,12 @@ type ExternalHwAssocs = BTreeMap<HwExceptionNumber, (TaskIdent, ExceptionIdent)>
 type InternalHwAssocs = BTreeMap<ExceptionIdent, TaskIdent>;
 type SwAssocs = BTreeMap<SwExceptionNumber, Vec<syn::Ident>>;
 
+pub struct TaskResolveMaps {
+    pub exceptions: InternalHwAssocs,
+    pub interrupts: ExternalHwAssocs,
+    pub sw_assocs: SwAssocs,
+}
+
 pub struct TaskResolver<'a> {
     cargo: &'a CargoWrapper,
     app: TokenStream,
@@ -60,11 +66,15 @@ impl<'a> TaskResolver<'a> {
         })
     }
 
-    pub fn resolve(&self) -> Result<((ExternalHwAssocs, InternalHwAssocs), SwAssocs)> {
-        let (ints, excps) = self.hardware_tasks()?;
-        let sw_tasks = self.software_tasks()?;
+    pub fn resolve(&self) -> Result<TaskResolveMaps> {
+        let (exceptions, interrupts) = self.hardware_tasks()?;
+        let sw_assocs = self.software_tasks()?;
 
-        Ok(((excps, ints), sw_tasks))
+        Ok(TaskResolveMaps {
+            exceptions,
+            interrupts,
+            sw_assocs,
+        })
     }
 
     /// Parses an RTIC `mod app { ... }` declaration and associates the full
