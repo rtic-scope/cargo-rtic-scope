@@ -23,7 +23,7 @@ impl Sink {
         remove_prev_traces: bool,
     ) -> Result<Self> {
         if remove_prev_traces {
-            for trace in Self::list_trace_files(trace_dir)? {
+            for trace in Self::find_trace_files(trace_dir)? {
                 fs::remove_file(trace).context("Failed to remove previous trace file")?;
             }
         }
@@ -39,7 +39,7 @@ impl Sink {
                     .dirty_suffix("-dirty"),
             ))?;
         let date = Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
-        let path = trace_dir.join(format!(
+        let file = trace_dir.join(format!(
             "{}-g{}-{}.{}",
             artifact.target.name,
             git_shortdesc,
@@ -51,7 +51,7 @@ impl Sink {
         let file = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(&path)?;
+            .open(&file)?;
 
         Ok(Sink {
             file,
@@ -59,8 +59,8 @@ impl Sink {
         })
     }
 
-    /// Greps `*.trace` in given path.
-    fn list_trace_files(path: &Path) -> Result<Vec<PathBuf>> {
+    /// ls `*.trace` in given path.
+    fn find_trace_files(path: &Path) -> Result<impl Iterator<Item = PathBuf>> {
         Ok(fs::read_dir(path)
             .context("Failed to read trace directory")?
             // we only care about files we can access
@@ -78,8 +78,7 @@ impl Sink {
                 } else {
                     None
                 }
-            })
-            .collect())
+            }))
     }
 
     /// Attempts to find a git repository starting from the given path
