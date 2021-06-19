@@ -64,10 +64,6 @@ impl CargoWrapper {
 
         // Only require +nightly toolchain if build cache isn't
         // otherwise set explicitly.
-        //
-        // TODO fix in production. `cargo rtic-trace` calls
-        // /home/tmplt/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo
-        // which does not have +nightly.
         if env::var_os("CARGO_TARGET_DIR").is_none()
             && target_dir.is_none()
             && !cargo
