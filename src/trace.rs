@@ -43,7 +43,7 @@ impl Sink {
             ))?;
         let date = Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
         let file = trace_dir.join(format!(
-            "{}-g{}-{}.{}",
+            "{}-g{}-{}{}",
             artifact.target.name,
             git_shortdesc,
             date,
