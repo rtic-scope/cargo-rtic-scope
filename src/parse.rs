@@ -1,6 +1,7 @@
 use crate::build::CargoWrapper;
 
 use std::collections::BTreeMap;
+use std::fmt;
 use std::fs;
 use std::io::Write;
 
@@ -11,20 +12,42 @@ use libloading;
 use proc_macro2::{Ident, TokenStream, TokenTree};
 use quote::{format_ident, quote};
 use rtic_syntax;
+use serde::{Deserialize, Serialize};
 use syn;
 
 type HwExceptionNumber = u8;
 type SwExceptionNumber = usize;
-type ExceptionIdent = syn::Ident;
-type TaskIdent = [syn::Ident; 2];
+type ExceptionIdent = String;
+type TaskIdent = [String; 2];
 type ExternalHwAssocs = BTreeMap<HwExceptionNumber, (TaskIdent, ExceptionIdent)>;
 type InternalHwAssocs = BTreeMap<ExceptionIdent, TaskIdent>;
-type SwAssocs = BTreeMap<SwExceptionNumber, Vec<syn::Ident>>;
+type SwAssocs = BTreeMap<SwExceptionNumber, Vec<String>>;
 
+#[derive(Serialize, Deserialize)]
 pub struct TaskResolveMaps {
     pub exceptions: InternalHwAssocs,
     pub interrupts: ExternalHwAssocs,
     pub sw_assocs: SwAssocs,
+}
+
+impl fmt::Display for TaskResolveMaps {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Here C++ reigns superior with its generic lambdas.
+        macro_rules! display_map {
+            ($h:expr, $m:expr) => {{
+                writeln!(f, "{}:", $h)?;
+                for (k, v) in $m.iter() {
+                    writeln!(f, "\t {} -> {:?}", k, v)?;
+                }
+
+                Ok(())
+            }};
+        }
+
+        display_map!("exceptions", self.exceptions)?;
+        display_map!("interrupts", self.interrupts)?;
+        display_map!("software tasks", self.sw_assocs)
+    }
 }
 
 pub struct TaskResolver<'a> {
@@ -124,7 +147,10 @@ impl<'a> TaskResolver<'a> {
 
                     // is the function decorated with #[trace]?
                     if fun.attrs.iter().any(|a| a.path == syn::parse_quote!(trace)) {
-                        assocs.insert(id_gen.generate(), ctx.clone());
+                        assocs.insert(
+                            id_gen.generate(),
+                            ctx.iter().map(|i| i.to_string()).collect(),
+                        );
                     }
 
                     // walk down all other nested functions
@@ -225,7 +251,7 @@ impl<'a> TaskResolver<'a> {
             .filter_map(|(name, hwt)| {
                 let bind = &hwt.args.binds;
                 if let Some(_) = int_binds.iter().find(|&b| b == bind) {
-                    Some((bind.clone(), [syn::parse_quote!(app), name.clone()]))
+                    Some((bind.to_string(), ["app".to_string(), name.to_string()]))
                 } else {
                     None
                 }
@@ -240,7 +266,7 @@ impl<'a> TaskResolver<'a> {
                 if let Some(int) = excpt_nrs.get(&bind) {
                     Some((
                         int.clone(),
-                        ([syn::parse_quote!(app), name.clone()], bind.clone()),
+                        (["app".to_string(), name.to_string()], bind.to_string()),
                     ))
                 } else {
                     None

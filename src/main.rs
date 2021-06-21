@@ -94,12 +94,7 @@ fn main() -> Result<()> {
         .context("Failed to parse RTIC application source file")?
         .resolve()
         .context("Failed to resolve tasks")?;
-
-    println!("int: {:?}, ext: {:?}", maps.interrupts, maps.exceptions);
-    println!("Software tasks:");
-    for (k, v) in maps.sw_assocs {
-        println!("({}, {:?})", k, v);
-    }
+    println!("{}", &maps);
 
     // Flash binary to target
     //
@@ -117,8 +112,8 @@ fn main() -> Result<()> {
     .context("Failed to flash target firmware")?;
     println!("Flashed.");
 
-    // Sample the timestamp of target reset
-    trace_sink.timestamp_reset(|| {
+    // Sample the timestamp of target reset, flush metadata to file.
+    trace_sink.init(maps, || {
         // Reset the target to  execute flashed binary
         println!("Resetting target...");
         let mut core = session.core(0)?;

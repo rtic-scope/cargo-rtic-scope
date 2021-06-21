@@ -1,3 +1,5 @@
+use crate::parse::TaskResolveMaps;
+
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -7,6 +9,7 @@ use cargo_metadata::Artifact;
 use chrono::prelude::*;
 use git2::{DescribeFormatOptions, DescribeOptions, Repository};
 use itm_decode::{Decoder, DecoderState, TimestampedTracePackets};
+use serde::ser::{SerializeSeq, Serializer};
 use serde_json;
 
 pub struct Sink {
@@ -98,17 +101,29 @@ impl Sink {
         }
     }
 
-    /// Samples a timestamp after which the target is immidiately reset.
-    pub fn timestamp_reset<F>(&mut self, reset_fun: F) -> Result<()>
+    /// Initializes the trace file with metadata: task resolve maps and
+    /// target reset timestamp.
+    pub fn init<F>(&mut self, maps: TaskResolveMaps, reset_fun: F) -> Result<()>
     where
         F: FnOnce() -> Result<()>,
     {
-        let ts = Local::now();
+        // Create a trace file header with metadata (maps, reset
+        // timestamp). Any bytes after this sequence refers to trace
+        // packets.
+        //
+        // A trace file will then contain: [maps, timestamp], [packets,
+        // ...]
+        let mut ser = serde_json::Serializer::new(&mut self.file);
+        let mut seq = ser.serialize_seq(Some(2))?;
+        {
+            seq.serialize_element(&maps)?;
 
-        reset_fun().context("Failed to reset target")?;
+            let ts = Local::now();
+            reset_fun().context("Failed to reset target")?;
 
-        let json = serde_json::to_string(&ts)?;
-        self.file.write_all(json.as_bytes())?;
+            seq.serialize_element(&ts)?;
+            seq.end()?;
+        }
 
         Ok(())
     }
