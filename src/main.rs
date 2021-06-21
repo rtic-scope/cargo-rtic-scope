@@ -17,6 +17,8 @@ struct Opts {
     cmd: Command,
 }
 
+/// Execute and trace a chosen application on a target device and record
+/// the trace stream to file.
 #[derive(StructOpt, Debug)]
 struct TraceOpts {
     /// Binary to flash and trace.
@@ -44,6 +46,7 @@ struct TraceOpts {
     remove_prev_traces: bool,
 }
 
+/// Replay a previously recorded trace stream for post-mortem analysis.
 #[derive(StructOpt, Debug)]
 struct ReplayOpts {
     #[structopt(long = "list", short = "l")]
