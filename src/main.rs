@@ -49,8 +49,11 @@ struct TraceOpts {
 /// Replay a previously recorded trace stream for post-mortem analysis.
 #[derive(StructOpt, Debug)]
 struct ReplayOpts {
-    #[structopt(long = "list", short = "l")]
+    #[structopt(name = "list", long = "list", short = "l")]
     list: bool,
+
+    #[structopt(required_unless("list"))]
+    index: Option<usize>,
 
     /// Target binary from which to resolve the build cache and thus
     /// previously recorded trace streams.
@@ -123,7 +126,8 @@ fn trace(opts: TraceOpts) -> Result<()> {
     // TODO make this into Sink::generate().remove_old(), etc.
     let mut trace_sink = trace::Sink::generate(
         &artifact,
-        &opts.trace_dir
+        &opts
+            .trace_dir
             .unwrap_or(cargo.target_dir().unwrap().join("rtic-traces")),
         opts.remove_prev_traces,
     )
@@ -172,22 +176,31 @@ fn trace(opts: TraceOpts) -> Result<()> {
 }
 
 fn replay(opts: ReplayOpts) -> Result<()> {
+    let mut traces = trace::find_trace_files(&{
+        if let Some(dir) = opts.trace_dir {
+            dir
+        } else {
+            let (cargo, _artifact) = build_target_binary(&opts.bin.unwrap(), vec![])?;
+            cargo.target_dir().unwrap().join("rtic-traces")
+        }
+    })?;
+
     if opts.list {
-        for (i, trace) in trace::Sink::find_trace_files(&{
-            if let Some(dir) = opts.trace_dir {
-                dir
-            } else {
-                let (cargo, _artifact) = build_target_binary(&opts.bin.unwrap(), vec![])?;
-                cargo.target_dir().unwrap().join("rtic-traces")
-            }
-        })?
-        .enumerate()
-        {
+        for (i, trace) in traces.enumerate() {
             println!("{}\t{}", i, trace.display());
         }
+    } else if let Some(idx) = opts.index {
+        let trace = traces
+            .nth(idx)
+            .with_context(|| format!("No trace with index {}", idx))?;
+        println!("Replaying {}", trace.display());
 
-        return Ok(());
+        // open trace file and print packets (for now)
+        let mut src = trace::Source::open(trace).context("Failed to open trace file")?;
+        for p in src.iter() {
+            println!("{:?}", p?);
+        }
     }
 
-    todo!();
+    Ok(())
 }

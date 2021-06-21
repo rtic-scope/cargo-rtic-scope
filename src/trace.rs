@@ -1,32 +1,70 @@
 use crate::parse::TaskResolveMaps;
 
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use cargo_metadata::Artifact;
 use chrono::prelude::*;
 use git2::{DescribeFormatOptions, DescribeOptions, Repository};
-use itm_decode::{Decoder, DecoderState};
+use itm_decode::{Decoder, DecoderState, TimestampedTracePackets};
 use serde::ser::{SerializeSeq, Serializer};
-use serde_json;
+use serde_json::{self, de::IoRead, StreamDeserializer};
+
+const TRACE_FILE_EXT: &'static str = ".trace";
 
 pub struct Sink {
     file: File,
     decoder: Decoder,
 }
 
-impl Sink {
-    const TRACE_FILE_EXT: &'static str = ".trace";
+pub struct Source {
+    reader: BufReader<File>,
+}
 
+impl Source {
+    pub fn open(trace_path: PathBuf) -> Result<Self> {
+        use serde_json::Value;
+
+        let file = fs::OpenOptions::new().read(true).open(&trace_path)?;
+        let mut reader = BufReader::new(file);
+
+        // read metadata header
+        let mut stream = serde_json::Deserializer::from_reader(&mut reader).into_iter::<Value>();
+        if let Some(Ok(Value::Array(metadata))) = stream.next() {
+            let mut metadata = metadata.iter();
+            let v: Value = metadata.next().unwrap().clone();
+            let maps: TaskResolveMaps = serde_json::from_value(v).unwrap();
+            println!("{}", &maps);
+
+            let v: Value = metadata.next().unwrap().clone();
+            let timestamp: chrono::DateTime<Local> = serde_json::from_value(v).unwrap();
+            println!("timestamp: {}", timestamp);
+        } else {
+            bail!("Expected metadata header missing from trace file");
+        }
+
+        Ok(Source { reader })
+    }
+
+    pub fn iter<'a>(
+        &'a mut self,
+    ) -> StreamDeserializer<'a, IoRead<&'a mut BufReader<std::fs::File>>, TimestampedTracePackets>
+    {
+        serde_json::Deserializer::from_reader(&mut self.reader)
+            .into_iter::<TimestampedTracePackets>()
+    }
+}
+
+impl Sink {
     pub fn generate(
         artifact: &Artifact,
         trace_dir: &PathBuf,
         remove_prev_traces: bool,
     ) -> Result<Self> {
         if remove_prev_traces {
-            for trace in Self::find_trace_files(trace_dir)? {
+            for trace in find_trace_files(trace_dir)? {
                 fs::remove_file(trace).context("Failed to remove previous trace file")?;
             }
         }
@@ -44,10 +82,7 @@ impl Sink {
         let date = Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
         let file = trace_dir.join(format!(
             "{}-g{}-{}{}",
-            artifact.target.name,
-            git_shortdesc,
-            date,
-            Self::TRACE_FILE_EXT,
+            artifact.target.name, git_shortdesc, date, TRACE_FILE_EXT,
         ));
 
         fs::create_dir_all(trace_dir)?;
@@ -60,28 +95,6 @@ impl Sink {
             file,
             decoder: Decoder::new(),
         })
-    }
-
-    /// ls `*.trace` in given path.
-    pub fn find_trace_files(path: &Path) -> Result<impl Iterator<Item = PathBuf>> {
-        Ok(fs::read_dir(path)
-            .context("Failed to read trace directory")?
-            // we only care about files we can access
-            .map(|entry| entry.unwrap())
-            // grep *.trace
-            .filter_map(|entry| {
-                if entry.file_type().unwrap().is_file()
-                    && entry
-                        .file_name()
-                        .to_str()
-                        .unwrap()
-                        .ends_with(Self::TRACE_FILE_EXT)
-                {
-                    Some(entry.path())
-                } else {
-                    None
-                }
-            }))
     }
 
     /// Attempts to find a git repository starting from the given path
@@ -152,4 +165,26 @@ impl Sink {
 
         Ok(())
     }
+}
+
+/// ls `*.trace` in given path.
+pub fn find_trace_files(path: &Path) -> Result<impl Iterator<Item = PathBuf>> {
+    Ok(fs::read_dir(path)
+        .context("Failed to read trace directory")?
+        // we only care about files we can access
+        .map(|entry| entry.unwrap())
+        // grep *.trace
+        .filter_map(|entry| {
+            if entry.file_type().unwrap().is_file()
+                && entry
+                    .file_name()
+                    .to_str()
+                    .unwrap()
+                    .ends_with(TRACE_FILE_EXT)
+            {
+                Some(entry.path())
+            } else {
+                None
+            }
+        }))
 }
