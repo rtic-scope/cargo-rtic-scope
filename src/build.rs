@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use anyhow::{bail, Context, Result};
-use cargo_metadata::{Artifact, Message};
+pub use cargo_metadata::Artifact;
+use cargo_metadata::Message;
 use regex::Regex;
 
 pub struct CargoWrapper {

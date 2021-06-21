@@ -8,7 +8,7 @@ use anyhow::{bail, Context, Result};
 use cargo_metadata::Artifact;
 use chrono::prelude::*;
 use git2::{DescribeFormatOptions, DescribeOptions, Repository};
-use itm_decode::{Decoder, DecoderState, TimestampedTracePackets};
+use itm_decode::{Decoder, DecoderState};
 use serde::ser::{SerializeSeq, Serializer};
 use serde_json;
 
@@ -63,7 +63,7 @@ impl Sink {
     }
 
     /// ls `*.trace` in given path.
-    fn find_trace_files(path: &Path) -> Result<impl Iterator<Item = PathBuf>> {
+    pub fn find_trace_files(path: &Path) -> Result<impl Iterator<Item = PathBuf>> {
         Ok(fs::read_dir(path)
             .context("Failed to read trace directory")?
             // we only care about files we can access
