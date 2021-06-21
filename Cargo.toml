@@ -1,5 +1,5 @@
 [package]
-name = "cargo-rtic-trace"
+name = "cargo-rtic-scope"
 version = "0.1.0"
 authors = ["Viktor Sonesten <v@tmplt.dev>"]
 edition = "2018"

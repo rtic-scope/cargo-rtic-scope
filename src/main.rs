@@ -1,8 +1,3 @@
-// We want to be able to run
-//
-//     $ cargo rtic-trace --bin blinky --serial /dev/ttyUSB3
-//
-
 use std::env;
 use std::io::Read;
 use std::path::PathBuf;
@@ -17,7 +12,6 @@ mod serial;
 mod trace;
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "cargo-rtic-trace")]
 struct Opts {
     #[structopt(subcommand)]
     cmd: Command,
