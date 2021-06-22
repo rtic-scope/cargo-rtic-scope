@@ -2,6 +2,7 @@
 
 use chrono::prelude::Local;
 use itm_decode::ExceptionAction as TaskAction;
+#[allow(unused_imports)]
 use itm_decode::TracePacket;
 use serde::{Deserialize, Serialize};
 

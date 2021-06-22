@@ -15,8 +15,5 @@ version = "0.4"
 features = ["serde"]
 
 [dependencies.itm-decode]
-version = "0.4"
+git = "https://github.com/rtic-scope/itm-decode.git"
 features = ["serde"]
-
-[patch.crates-io]
-itm-decode = { git = "https://github.com/rtic-scope/itm-decode.git" }
