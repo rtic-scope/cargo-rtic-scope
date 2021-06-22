@@ -1,7 +1,35 @@
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
+//! API used between RTIC Scope front- and backends.
+
+use chrono::prelude::Local;
+use itm_decode::ExceptionAction as TaskAction;
+use itm_decode::TracePacket;
+use serde::{Deserialize, Serialize};
+
+type Timestamp = chrono::DateTime<Local>;
+
+/// A set of events that occurred at a certain timepoint after target
+/// reset.
+#[derive(Serialize, Deserialize)]
+pub struct EventChunk {
+    /// Collective timestamp for the chunk of [EventChunk::events].
+    pub timestamp: Timestamp,
+
+    pub events: Vec<EventType>,
+}
+
+/// Derivative subset of [TracePacket], where RTIC task information has
+/// been resolved.
+#[derive(Serialize, Deserialize)]
+pub enum EventType {
+    /// [TracePacket::Overflow] equivalent.
+    Overflow,
+
+    /// An RTIC task performed an action.
+    Task {
+        /// What RTIC task did something?
+        name: String,
+
+        /// What did the RTIC task do?
+        event: TaskAction,
+    },
 }
