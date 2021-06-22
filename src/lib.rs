@@ -1,7 +1,7 @@
 //! API used between RTIC Scope front- and backends.
 
 use chrono::prelude::Local;
-use itm_decode::ExceptionAction as TaskAction;
+use itm_decode::ExceptionAction;
 #[allow(unused_imports)]
 use itm_decode::TracePacket;
 use serde::{Deserialize, Serialize};
@@ -16,6 +16,19 @@ pub struct EventChunk {
     pub timestamp: Timestamp,
 
     pub events: Vec<EventType>,
+}
+
+/// Verbatim copy of [ExceptionAction], sans the enum name.
+#[derive(Serialize, Deserialize)]
+pub enum TaskAction {
+    /// Task was entered.
+    Entered,
+
+    /// Task was exited.
+    Exited,
+
+    /// Task was returned to.
+    Returned,
 }
 
 /// Derivative subset of [TracePacket], where RTIC task information has
