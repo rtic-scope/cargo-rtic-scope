@@ -13,3 +13,8 @@
 
 When done, `cargo-rtic-scope` will also stream the resolved trace to a
 frontend. For example, a graphical web application.
+
+## License
+A definitive license is to be later announced at a later date.
+
+Copyright (c) Viktor Sonesten
