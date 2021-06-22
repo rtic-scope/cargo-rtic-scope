@@ -21,6 +21,8 @@ pub struct Sink {
 
 pub struct Source {
     reader: BufReader<File>,
+    _maps: TaskResolveMaps,
+    _timestamp: chrono::DateTime<Local>,
 }
 
 impl Source {
@@ -30,24 +32,46 @@ impl Source {
         let file = fs::OpenOptions::new().read(true).open(&trace_path)?;
         let mut reader = BufReader::new(file);
 
-        // read metadata header
-        let mut stream = serde_json::Deserializer::from_reader(&mut reader).into_iter::<Value>();
-        if let Some(Ok(Value::Array(metadata))) = stream.next() {
-            let mut metadata = metadata.iter();
-            let v: Value = metadata.next().unwrap().clone();
-            let maps: TaskResolveMaps = serde_json::from_value(v).unwrap();
-            println!("{}", &maps);
+        let mut read_metadata = || {
+            let mut stream =
+                serde_json::Deserializer::from_reader(&mut reader).into_iter::<Value>();
+            if let Some(Ok(Value::Array(metadata))) = stream.next() {
+                let maps: TaskResolveMaps = serde_json::from_value(
+                    metadata
+                        .iter()
+                        .nth(0) // XXX magic
+                        .context("Resolve map object missing")?
+                        .clone(),
+                )
+                .context("Failed to deserialize resolve map object")?;
 
-            let v: Value = metadata.next().unwrap().clone();
-            let timestamp: chrono::DateTime<Local> = serde_json::from_value(v).unwrap();
-            println!("timestamp: {}", timestamp);
-        } else {
-            bail!("Expected metadata header missing from trace file");
-        }
+                let timestamp: chrono::DateTime<Local> = serde_json::from_value(
+                    metadata
+                        .iter()
+                        .nth(1) // XXX magic
+                        .context("Reset timestamp string missing")?
+                        .clone(),
+                )
+                .context("Failed to deserialize reset timestamp string")?;
 
-        Ok(Source { reader })
+                Ok((maps, timestamp))
+            } else {
+                bail!("Expected metadata header missing from trace file");
+            }
+        };
+        let (maps, timestamp) = read_metadata().context("Failed to deserialize metadata header")?;
+        println!("{}", &maps);
+        println!("timestamp: {}", timestamp);
+
+        Ok(Source {
+            reader,
+            _maps: maps,
+            _timestamp: timestamp,
+        })
     }
 
+    /// Iterator over the trace file data objects, deserializing the
+    /// objects as they are read.
     pub fn iter<'a>(
         &'a mut self,
     ) -> StreamDeserializer<'a, IoRead<&'a mut BufReader<std::fs::File>>, TimestampedTracePackets>
