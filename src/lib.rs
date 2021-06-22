@@ -31,6 +31,6 @@ pub enum EventType {
         name: String,
 
         /// What did the RTIC task do?
-        event: TaskAction,
+        action: TaskAction,
     },
 }
