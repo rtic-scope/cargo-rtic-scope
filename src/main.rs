@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 use probe_rs::{flashing, Probe};
+use rtic_scope_api::{self as api, Frontend};
 use structopt::StructOpt;
 
 mod build;
@@ -78,10 +79,20 @@ fn main() -> Result<()> {
         env::args().skip(1),
     );
 
-    return match opts.cmd {
-        Command::Trace(opts) => trace(opts),
-        Command::Replay(opts) => replay(opts),
+    let (tx, rx) = std::sync::mpsc::channel();
+    let frontend = rtic_scope_frontend_dummy::Dummy::spawn(rx)?;
+
+    match opts.cmd {
+        Command::Trace(opts) => trace(opts, tx)?,
+        Command::Replay(opts) => replay(opts, tx)?,
     };
+
+    frontend
+        .join()
+        .expect("Failed to join frontend thread")
+        .context("Frontend reported error")?;
+
+    Ok(())
 }
 
 // TODO Rethink this
@@ -104,7 +115,7 @@ fn build_target_binary(
     Ok((cargo, artifact))
 }
 
-fn trace(opts: TraceOpts) -> Result<()> {
+fn trace(opts: TraceOpts, tx: std::sync::mpsc::Sender<api::EventChunk>) -> Result<()> {
     // Attach to target and prepare serial. We want to fail fast on any
     // I/O issues.
     //
@@ -169,13 +180,17 @@ fn trace(opts: TraceOpts) -> Result<()> {
 
     println!("Tracing...");
     for byte in trace_tty.bytes() {
-        trace_sink.push(&maps, byte.context("Failed to read byte from trace tty")?)?;
+        trace_sink.push(
+            &maps,
+            &tx,
+            byte.context("Failed to read byte from trace tty")?,
+        )?;
     }
 
     Ok(())
 }
 
-fn replay(opts: ReplayOpts) -> Result<()> {
+fn replay(opts: ReplayOpts, tx: std::sync::mpsc::Sender<api::EventChunk>) -> Result<()> {
     let mut traces = trace::find_trace_files(&{
         if let Some(dir) = opts.trace_dir {
             dir
@@ -204,7 +219,10 @@ fn replay(opts: ReplayOpts) -> Result<()> {
                 .resolve_tasks(p.clone())
                 .with_context(|| format!("Failed to resolve tasks for packets {:?}", p))
             {
-                Ok(packets) => println!("{:?}", packets),
+                Ok(packets) => {
+                    tx.send(packets)
+                        .context("Failed to send EventChunk to frontend")?;
+                }
                 Err(e) => eprintln!("{}, ignoring...", e),
             }
         }

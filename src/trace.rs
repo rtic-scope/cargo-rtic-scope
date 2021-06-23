@@ -9,16 +9,19 @@ use cargo_metadata::Artifact;
 use chrono::prelude::*;
 use git2::{DescribeFormatOptions, DescribeOptions, Repository};
 use itm_decode::{Decoder, DecoderState, TimestampedTracePackets};
+use rtic_scope_api as api;
 use serde::ser::{SerializeSeq, Serializer};
 use serde_json::{self, de::IoRead, StreamDeserializer};
 
 const TRACE_FILE_EXT: &'static str = ".trace";
 
+/// Something data is serialized into. Either a file or a frontend.
 pub struct Sink {
     handle: Box<dyn Write>,
     decoder: Decoder,
 }
 
+/// Something data is deserialized from. Always a file.
 pub struct Source {
     reader: BufReader<File>,
     maps: TaskResolveMaps,
@@ -142,8 +145,8 @@ impl Sink {
         }
     }
 
-    /// Initializes the trace file with metadata: task resolve maps and
-    /// target reset timestamp.
+    /// Initializes the sink with metadata: task resolve maps and target
+    /// reset timestamp.
     pub fn init<F>(&mut self, maps: &TaskResolveMaps, reset_fun: F) -> Result<()>
     where
         F: FnOnce() -> Result<()>,
@@ -169,7 +172,12 @@ impl Sink {
         Ok(())
     }
 
-    pub fn push(&mut self, maps: &TaskResolveMaps, byte: u8) -> Result<()> {
+    pub fn push(
+        &mut self,
+        maps: &TaskResolveMaps,
+        tx: &std::sync::mpsc::Sender<api::EventChunk>,
+        byte: u8,
+    ) -> Result<()> {
         self.decoder.push([byte].to_vec());
 
         // decode available packets and serialize to file
@@ -183,7 +191,10 @@ impl Sink {
                     match maps.resolve_tasks(packets.clone()).with_context(|| {
                         format!("Failed to resolve tasks for packets {:?}", packets)
                     }) {
-                        Ok(res_packets) => println!("{:?}", res_packets),
+                        Ok(packets) => {
+                            tx.send(packets)
+                                .context("Failed to send EventChunk to frontend")?;
+                        }
                         Err(e) => eprintln!("{}, ignoring...", e),
                     }
 
