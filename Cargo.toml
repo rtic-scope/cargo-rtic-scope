@@ -22,6 +22,7 @@ rtic-syntax = { git = "https://github.com/rtic-rs/rtic-syntax.git" }
 regex = "1"
 serde = "1"
 serde_json = "1"
+rtic-scope-api = { git = "https://github.com/rtic-scope/api.git" }
 
 [dependencies.serialport]
 version = "4"
