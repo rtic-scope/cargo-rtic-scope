@@ -15,7 +15,7 @@ use serde_json::{self, de::IoRead, StreamDeserializer};
 const TRACE_FILE_EXT: &'static str = ".trace";
 
 pub struct Sink {
-    file: File,
+    handle: Box<dyn Write>,
     decoder: Decoder,
 }
 
@@ -86,7 +86,7 @@ impl Source {
 }
 
 impl Sink {
-    pub fn generate(
+    pub fn generate_trace_file(
         artifact: &Artifact,
         trace_dir: &PathBuf,
         remove_prev_traces: bool,
@@ -120,7 +120,7 @@ impl Sink {
             .open(&file)?;
 
         Ok(Sink {
-            file,
+            handle: Box::new(file),
             decoder: Decoder::new(),
         })
     }
@@ -154,7 +154,7 @@ impl Sink {
         //
         // A trace file will then contain: [maps, timestamp], [packets,
         // ...]
-        let mut ser = serde_json::Serializer::new(&mut self.file);
+        let mut ser = serde_json::Serializer::new(&mut self.handle);
         let mut seq = ser.serialize_seq(Some(2))?;
         {
             seq.serialize_element(maps)?;
@@ -188,7 +188,7 @@ impl Sink {
                     }
 
                     let json = serde_json::to_string(&packets)?;
-                    self.file.write_all(json.as_bytes())?;
+                    self.handle.write_all(json.as_bytes())?;
                 }
                 Err(e) => {
                     println!("Error: {:?}", e);

@@ -124,7 +124,7 @@ fn trace(opts: TraceOpts) -> Result<()> {
     let (cargo, artifact) = build_target_binary(&opts.bin, vec![])?;
 
     // TODO make this into Sink::generate().remove_old(), etc.
-    let mut trace_sink = trace::Sink::generate(
+    let mut trace_sink = trace::Sink::generate_trace_file(
         &artifact,
         &opts
             .trace_dir
