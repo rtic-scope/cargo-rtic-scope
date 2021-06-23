@@ -1,0 +1,11 @@
+[package]
+name = "rtic-scope-frontend-dummy"
+version = "0.1.0"
+authors = ["Viktor Sonesten <v@tmplt.dev>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rtic-scope-api = { git = "https://github.com/rtic-scope/api.git" }
+anyhow = "1"
