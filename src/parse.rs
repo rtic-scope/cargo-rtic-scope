@@ -8,9 +8,11 @@ use std::io::Write;
 use anyhow::{bail, Context, Result};
 use cargo_metadata::Artifact;
 use include_dir::include_dir;
+use itm_decode::{ExceptionAction, TimestampedTracePackets, TracePacket};
 use libloading;
 use proc_macro2::{Ident, TokenStream, TokenTree};
 use quote::{format_ident, quote};
+use rtic_scope_api::{EventChunk, EventType, TaskAction};
 use rtic_syntax;
 use serde::{Deserialize, Serialize};
 use syn;
@@ -23,7 +25,7 @@ type ExternalHwAssocs = BTreeMap<HwExceptionNumber, (TaskIdent, ExceptionIdent)>
 type InternalHwAssocs = BTreeMap<ExceptionIdent, TaskIdent>;
 type SwAssocs = BTreeMap<SwExceptionNumber, Vec<String>>;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct TaskResolveMaps {
     pub exceptions: InternalHwAssocs,
     pub interrupts: ExternalHwAssocs,
@@ -47,6 +49,59 @@ impl fmt::Display for TaskResolveMaps {
         display_map!("exceptions", self.exceptions)?;
         display_map!("interrupts", self.interrupts)?;
         display_map!("software tasks", self.sw_assocs)
+    }
+}
+
+impl TaskResolveMaps {
+    pub fn resolve_tasks(&self, ts_packets: TimestampedTracePackets) -> Result<EventChunk> {
+        // XXX resolve correct DateTime
+        let _unfixed_ts = ts_packets.timestamp;
+
+        let resolve_exception = |&excpt| -> Result<String> {
+            use itm_decode::cortex_m::VectActive;
+
+            match excpt {
+                VectActive::ThreadMode => bail!("Don't know what to do with ThreadMode"), // XXX fix
+                VectActive::Exception(e) => Ok(self
+                    .exceptions
+                    .get(&format!("{:?}", e))
+                    .with_context(|| format!("Exception map is missing key {:?}", e))?
+                    .join("::")),
+                VectActive::Interrupt { irqn } => {
+                    let (fun, _bind) = self
+                        .interrupts
+                        .get(&irqn)
+                        .with_context(|| format!("Interrupt map is missing key {}", irqn))?;
+                    Ok(fun.join("::"))
+                }
+            }
+        };
+
+        // convert itm_decode::TracePacket -> api::EventType
+        let mut events = vec![];
+        for packet in ts_packets.packets.iter() {
+            match packet {
+                TracePacket::Overflow => {
+                    events.push(EventType::Overflow);
+                }
+                TracePacket::ExceptionTrace { exception, action } => events.push(EventType::Task {
+                    name: resolve_exception(exception)?,
+                    action: match action {
+                        ExceptionAction::Entered => TaskAction::Entered,
+                        ExceptionAction::Exited => TaskAction::Exited,
+                        ExceptionAction::Returned => TaskAction::Returned,
+                    },
+                }),
+                _ => {
+                    eprintln!("Don't know how to convert {:?}. Skipping...", packet);
+                }
+            }
+        }
+
+        Ok(EventChunk {
+            timestamp: chrono::prelude::Local::now(),
+            events,
+        })
     }
 }
 

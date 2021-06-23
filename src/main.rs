@@ -157,7 +157,7 @@ fn trace(opts: TraceOpts) -> Result<()> {
     println!("Flashed.");
 
     // Sample the timestamp of target reset, flush metadata to file.
-    trace_sink.init(maps, || {
+    trace_sink.init(&maps, || {
         // Reset the target to  execute flashed binary
         println!("Resetting target...");
         let mut core = session.core(0)?;
@@ -169,7 +169,7 @@ fn trace(opts: TraceOpts) -> Result<()> {
 
     println!("Tracing...");
     for byte in trace_tty.bytes() {
-        trace_sink.push(byte.context("Failed to read byte from trace tty")?)?;
+        trace_sink.push(&maps, byte.context("Failed to read byte from trace tty")?)?;
     }
 
     Ok(())
@@ -197,8 +197,16 @@ fn replay(opts: ReplayOpts) -> Result<()> {
 
         // open trace file and print packets (for now)
         let mut src = trace::Source::open(trace).context("Failed to open trace file")?;
+        let maps = src.copy_maps();
         for p in src.iter() {
-            println!("{:?}", p?);
+            let p = p?;
+            match maps
+                .resolve_tasks(p.clone())
+                .with_context(|| format!("Failed to resolve tasks for packets {:?}", p))
+            {
+                Ok(packets) => println!("{:?}", packets),
+                Err(e) => eprintln!("{}, ignoring...", e),
+            }
         }
     }
 

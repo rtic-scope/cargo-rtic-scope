@@ -21,7 +21,7 @@ pub struct Sink {
 
 pub struct Source {
     reader: BufReader<File>,
-    _maps: TaskResolveMaps,
+    maps: TaskResolveMaps,
     _timestamp: chrono::DateTime<Local>,
 }
 
@@ -65,7 +65,7 @@ impl Source {
 
         Ok(Source {
             reader,
-            _maps: maps,
+            maps,
             _timestamp: timestamp,
         })
     }
@@ -78,6 +78,10 @@ impl Source {
     {
         serde_json::Deserializer::from_reader(&mut self.reader)
             .into_iter::<TimestampedTracePackets>()
+    }
+
+    pub fn copy_maps(&self) -> TaskResolveMaps {
+        self.maps.clone()
     }
 }
 
@@ -140,7 +144,7 @@ impl Sink {
 
     /// Initializes the trace file with metadata: task resolve maps and
     /// target reset timestamp.
-    pub fn init<F>(&mut self, maps: TaskResolveMaps, reset_fun: F) -> Result<()>
+    pub fn init<F>(&mut self, maps: &TaskResolveMaps, reset_fun: F) -> Result<()>
     where
         F: FnOnce() -> Result<()>,
     {
@@ -153,7 +157,7 @@ impl Sink {
         let mut ser = serde_json::Serializer::new(&mut self.file);
         let mut seq = ser.serialize_seq(Some(2))?;
         {
-            seq.serialize_element(&maps)?;
+            seq.serialize_element(maps)?;
 
             let ts = Local::now();
             reset_fun().context("Failed to reset target")?;
@@ -165,7 +169,7 @@ impl Sink {
         Ok(())
     }
 
-    pub fn push(&mut self, byte: u8) -> Result<()> {
+    pub fn push(&mut self, maps: &TaskResolveMaps, byte: u8) -> Result<()> {
         self.decoder.push([byte].to_vec());
 
         // decode available packets and serialize to file
@@ -176,7 +180,13 @@ impl Sink {
             match self.decoder.pull_with_timestamp() {
                 Ok(None) => break,
                 Ok(Some(packets)) => {
-                    println!("{:?}", packets);
+                    match maps.resolve_tasks(packets.clone()).with_context(|| {
+                        format!("Failed to resolve tasks for packets {:?}", packets)
+                    }) {
+                        Ok(res_packets) => println!("{:?}", res_packets),
+                        Err(e) => eprintln!("{}, ignoring...", e),
+                    }
+
                     let json = serde_json::to_string(&packets)?;
                     self.file.write_all(json.as_bytes())?;
                 }
