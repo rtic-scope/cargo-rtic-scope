@@ -10,7 +10,7 @@ impl api::Frontend for Dummy {
                 println!("{:?}", chunk);
             }
 
-            // channel has hung when iter above fails
+            // channel has hung up when above iter fails
 
             Ok(())
         }))
