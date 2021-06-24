@@ -1,39 +1,82 @@
 use crate::parse::TaskResolveMaps;
 
-use std::fs::{self, File};
-use std::io::{BufReader, Write};
+use std::fs;
+use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use cargo_metadata::Artifact;
 use chrono::prelude::*;
 use git2::{DescribeFormatOptions, DescribeOptions, Repository};
 use itm_decode::{Decoder, DecoderState, TimestampedTracePackets};
 use rtic_scope_api as api;
 use serde::ser::{SerializeSeq, Serializer};
-use serde_json::{self, de::IoRead, StreamDeserializer};
+use serde_json;
 
 const TRACE_FILE_EXT: &'static str = ".trace";
 
 /// Something data is serialized into. Either a file or a frontend.
 pub struct Sink {
     handle: Box<dyn Write>,
-    decoder: Decoder,
 }
+// TODO Use when trait aliases are stabilized <https://github.com/rust-lang/rust/issues/41517>
+// trait Source: Iterator<Item = Result<TimestampedTracePackets>>;
 
 /// Something data is deserialized from. Always a file.
-pub struct Source {
-    reader: BufReader<File>,
+pub struct FileSource {
+    reader: BufReader<fs::File>,
     maps: TaskResolveMaps,
     _timestamp: chrono::DateTime<Local>,
 }
 
-impl Source {
-    pub fn open(trace_path: PathBuf) -> Result<Self> {
+pub struct TtySource {
+    bytes: std::io::Bytes<fs::File>,
+    decoder: Decoder,
+}
+
+impl TtySource {
+    pub fn new(device: fs::File) -> Self {
+        Self {
+            bytes: device.bytes(),
+            decoder: Decoder::new(),
+        }
+    }
+}
+
+impl Iterator for TtySource {
+    type Item = Result<TimestampedTracePackets>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(b) = self.bytes.next() {
+            match b {
+                Ok(b) => self.decoder.push([b].to_vec()),
+                Err(e) => {
+                    return Some(Err(anyhow!(
+                        "Failed to read byte from serial device: {:?}",
+                        e
+                    )))
+                }
+            };
+
+            match self.decoder.pull_with_timestamp() {
+                Ok(None) => continue,
+                Ok(Some(packets)) => return Some(Ok(packets)),
+                Err(e) => {
+                    self.decoder.state = DecoderState::Header;
+                    return Some(Err(anyhow!("Failed to decode packets from serial: {:?}", e)));
+                }
+            }
+        }
+
+        None
+    }
+}
+
+impl FileSource {
+    pub fn new(fd: fs::File) -> Result<Self> {
         use serde_json::Value;
 
-        let file = fs::OpenOptions::new().read(true).open(&trace_path)?;
-        let mut reader = BufReader::new(file);
+        let mut reader = BufReader::new(fd);
 
         let mut read_metadata = || {
             let mut stream =
@@ -66,25 +109,29 @@ impl Source {
         println!("{}", &maps);
         println!("timestamp: {}", timestamp);
 
-        Ok(Source {
+        Ok(Self {
             reader,
             maps,
             _timestamp: timestamp,
         })
     }
 
-    /// Iterator over the trace file data objects, deserializing the
-    /// objects as they are read.
-    pub fn iter<'a>(
-        &'a mut self,
-    ) -> StreamDeserializer<'a, IoRead<&'a mut BufReader<std::fs::File>>, TimestampedTracePackets>
-    {
-        serde_json::Deserializer::from_reader(&mut self.reader)
-            .into_iter::<TimestampedTracePackets>()
-    }
-
     pub fn copy_maps(&self) -> TaskResolveMaps {
         self.maps.clone()
+    }
+}
+
+impl Iterator for FileSource {
+    type Item = Result<TimestampedTracePackets>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut stream = serde_json::Deserializer::from_reader(&mut self.reader)
+            .into_iter::<TimestampedTracePackets>();
+        match stream.next() {
+            Some(Ok(packets)) => Some(Ok(packets)),
+            Some(e) => Some(e.context("Failed to deserialize packet from trace file")),
+            None => None,
+        }
     }
 }
 
@@ -124,7 +171,6 @@ impl Sink {
 
         Ok(Sink {
             handle: Box::new(file),
-            decoder: Decoder::new(),
         })
     }
 
@@ -176,37 +222,21 @@ impl Sink {
         &mut self,
         maps: &TaskResolveMaps,
         tx: &std::sync::mpsc::Sender<api::EventChunk>,
-        byte: u8,
+        packets: TimestampedTracePackets,
     ) -> Result<()> {
-        self.decoder.push([byte].to_vec());
-
-        // decode available packets and serialize to file
-        loop {
-            // TODO Rewrite itm-decode so that it is possible to check
-            // if a packet can be decoded. If one can, we timestamp when
-            // we have received a full new packet.
-            match self.decoder.pull_with_timestamp() {
-                Ok(None) => break,
-                Ok(Some(packets)) => {
-                    match maps.resolve_tasks(packets.clone()).with_context(|| {
-                        format!("Failed to resolve tasks for packets {:?}", packets)
-                    }) {
-                        Ok(packets) => {
-                            tx.send(packets)
-                                .context("Failed to send EventChunk to frontend")?;
-                        }
-                        Err(e) => eprintln!("{}, ignoring...", e),
-                    }
-
-                    let json = serde_json::to_string(&packets)?;
-                    self.handle.write_all(json.as_bytes())?;
-                }
-                Err(e) => {
-                    println!("Error: {:?}", e);
-                    self.decoder.state = DecoderState::Header;
-                }
+        match maps
+            .resolve_tasks(packets.clone())
+            .with_context(|| format!("Failed to resolve tasks for packets {:?}", packets))
+        {
+            Ok(packets) => {
+                tx.send(packets)
+                    .context("Failed to send EventChunk to frontend")?;
             }
+            Err(e) => eprintln!("{}, ignoring...", e),
         }
+
+        let json = serde_json::to_string(&packets)?;
+        self.handle.write_all(json.as_bytes())?;
 
         Ok(())
     }

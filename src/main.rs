@@ -1,5 +1,5 @@
 use std::env;
-use std::io::Read;
+use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
@@ -129,8 +129,10 @@ fn trace(opts: TraceOpts, tx: std::sync::mpsc::Sender<api::EventChunk>) -> Resul
         .attach("stm32f401re")
         .context("Failed to attach to stm32f401re")?;
 
-    let trace_tty = serial::configure(&opts.serial)
-        .with_context(|| format!("Failed to configure {}", opts.serial))?;
+    let trace_tty = trace::TtySource::new(
+        serial::configure(&opts.serial)
+            .with_context(|| format!("Failed to configure {}", opts.serial))?,
+    );
 
     let (cargo, artifact) = build_target_binary(&opts.bin, vec![])?;
 
@@ -179,12 +181,8 @@ fn trace(opts: TraceOpts, tx: std::sync::mpsc::Sender<api::EventChunk>) -> Resul
     })?;
 
     println!("Tracing...");
-    for byte in trace_tty.bytes() {
-        trace_sink.push(
-            &maps,
-            &tx,
-            byte.context("Failed to read byte from trace tty")?,
-        )?;
+    for packets in trace_tty.into_iter() {
+        trace_sink.push(&maps, &tx, packets?)?;
     }
 
     Ok(())
@@ -211,9 +209,9 @@ fn replay(opts: ReplayOpts, tx: std::sync::mpsc::Sender<api::EventChunk>) -> Res
         println!("Replaying {}", trace.display());
 
         // open trace file and print packets (for now)
-        let mut src = trace::Source::open(trace).context("Failed to open trace file")?;
+        let src = trace::FileSource::new(fs::OpenOptions::new().read(true).open(&trace)?)?;
         let maps = src.copy_maps();
-        for p in src.iter() {
+        for p in src.into_iter() {
             let p = p?;
             match maps
                 .resolve_tasks(p.clone())
