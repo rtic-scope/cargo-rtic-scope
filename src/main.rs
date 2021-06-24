@@ -12,6 +12,8 @@ mod parse;
 mod serial;
 mod trace;
 
+use trace::Sink;
+
 #[derive(Debug, StructOpt)]
 struct Opts {
     #[structopt(subcommand)]
@@ -137,7 +139,7 @@ fn trace(opts: TraceOpts, tx: std::sync::mpsc::Sender<api::EventChunk>) -> Resul
     let (cargo, artifact) = build_target_binary(&opts.bin, vec![])?;
 
     // TODO make this into Sink::generate().remove_old(), etc.
-    let mut trace_sink = trace::Sink::generate_trace_file(
+    let mut trace_sink = trace::FileSink::generate_trace_file(
         &artifact,
         &opts
             .trace_dir
@@ -182,7 +184,7 @@ fn trace(opts: TraceOpts, tx: std::sync::mpsc::Sender<api::EventChunk>) -> Resul
 
     println!("Tracing...");
     for packets in trace_tty.into_iter() {
-        trace_sink.push(&maps, &tx, packets?)?;
+        trace_sink.drain(packets?)?;
     }
 
     Ok(())

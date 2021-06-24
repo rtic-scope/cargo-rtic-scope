@@ -15,10 +15,6 @@ use serde_json;
 
 const TRACE_FILE_EXT: &'static str = ".trace";
 
-/// Something data is serialized into. Either a file or a frontend.
-pub struct Sink {
-    handle: Box<dyn Write>,
-}
 // TODO Use when trait aliases are stabilized <https://github.com/rust-lang/rust/issues/41517>
 // trait Source: Iterator<Item = Result<TimestampedTracePackets>>;
 
@@ -135,7 +131,15 @@ impl Iterator for FileSource {
     }
 }
 
-impl Sink {
+pub trait Sink {
+    fn drain(&mut self, packets: TimestampedTracePackets) -> Result<()>;
+}
+
+pub struct FileSink {
+    file: fs::File,
+}
+
+impl FileSink {
     pub fn generate_trace_file(
         artifact: &Artifact,
         trace_dir: &PathBuf,
@@ -149,7 +153,7 @@ impl Sink {
 
         // generate a short descroption on the format
         // "blinky-gbaadf00-dirty-2021-06-16T17:13:16.trace"
-        let repo = Self::find_git_repo(artifact.target.src_path.clone())?;
+        let repo = find_git_repo(artifact.target.src_path.clone())?;
         let git_shortdesc = repo
             .describe(&DescribeOptions::new().show_commit_oid_as_fallback(true))?
             .format(Some(
@@ -169,26 +173,7 @@ impl Sink {
             .create_new(true)
             .open(&file)?;
 
-        Ok(Sink {
-            handle: Box::new(file),
-        })
-    }
-
-    /// Attempts to find a git repository starting from the given path
-    /// and walking upwards until / is hit.
-    fn find_git_repo(mut path: PathBuf) -> Result<Repository> {
-        loop {
-            match Repository::open(&path) {
-                Ok(repo) => return Ok(repo),
-                Err(_) => {
-                    if path.pop() {
-                        continue;
-                    }
-
-                    bail!("Failed to find git repo root");
-                }
-            }
-        }
+        Ok(Self { file })
     }
 
     /// Initializes the sink with metadata: task resolve maps and target
@@ -203,7 +188,7 @@ impl Sink {
         //
         // A trace file will then contain: [maps, timestamp], [packets,
         // ...]
-        let mut ser = serde_json::Serializer::new(&mut self.handle);
+        let mut ser = serde_json::Serializer::new(&mut self.file);
         let mut seq = ser.serialize_seq(Some(2))?;
         {
             seq.serialize_element(maps)?;
@@ -217,28 +202,47 @@ impl Sink {
 
         Ok(())
     }
+}
 
-    pub fn push(
-        &mut self,
-        maps: &TaskResolveMaps,
-        tx: &std::sync::mpsc::Sender<api::EventChunk>,
-        packets: TimestampedTracePackets,
-    ) -> Result<()> {
-        match maps
+impl Sink for FileSink {
+    fn drain(&mut self, packets: TimestampedTracePackets) -> Result<()> {
+        let json = serde_json::to_string(&packets)?;
+        self.file.write_all(json.as_bytes())?;
+
+        Ok(())
+    }
+}
+
+pub struct FrontendSink {
+    socket: std::os::unix::net::UnixStream,
+    maps: TaskResolveMaps,
+}
+
+impl FrontendSink {
+    pub fn connect(socket: &Path, maps: TaskResolveMaps) -> Result<Self> {
+        Ok(Self {
+            socket: std::os::unix::net::UnixStream::connect(socket)
+                .context("Failed to connect to frontend socket")?,
+            maps,
+        })
+    }
+}
+
+impl Sink for FrontendSink {
+    fn drain(&mut self, packets: TimestampedTracePackets) -> Result<()> {
+        match self
+            .maps
             .resolve_tasks(packets.clone())
             .with_context(|| format!("Failed to resolve tasks for packets {:?}", packets))
         {
             Ok(packets) => {
-                tx.send(packets)
-                    .context("Failed to send EventChunk to frontend")?;
+                let json = serde_json::to_string(&packets)?;
+                self.socket.write_all(json.as_bytes())?;
+
+                Ok(())
             }
-            Err(e) => eprintln!("{}, ignoring...", e),
+            Err(e) => bail!("{}, ignoring...", e),
         }
-
-        let json = serde_json::to_string(&packets)?;
-        self.handle.write_all(json.as_bytes())?;
-
-        Ok(())
     }
 }
 
@@ -262,4 +266,21 @@ pub fn find_trace_files(path: &Path) -> Result<impl Iterator<Item = PathBuf>> {
                 None
             }
         }))
+}
+
+/// Attempts to find a git repository starting from the given path
+/// and walking upwards until / is hit.
+fn find_git_repo(mut path: PathBuf) -> Result<Repository> {
+    loop {
+        match Repository::open(&path) {
+            Ok(repo) => return Ok(repo),
+            Err(_) => {
+                if path.pop() {
+                    continue;
+                }
+
+                bail!("Failed to find git repo root");
+            }
+        }
+    }
 }
