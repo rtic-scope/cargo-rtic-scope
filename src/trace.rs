@@ -9,7 +9,6 @@ use cargo_metadata::Artifact;
 use chrono::prelude::*;
 use git2::{DescribeFormatOptions, DescribeOptions, Repository};
 use itm_decode::{Decoder, DecoderState, TimestampedTracePackets};
-use rtic_scope_api as api;
 use serde::ser::{SerializeSeq, Serializer};
 use serde_json;
 
@@ -59,7 +58,10 @@ impl Iterator for TtySource {
                 Ok(Some(packets)) => return Some(Ok(packets)),
                 Err(e) => {
                     self.decoder.state = DecoderState::Header;
-                    return Some(Err(anyhow!("Failed to decode packets from serial: {:?}", e)));
+                    return Some(Err(anyhow!(
+                        "Failed to decode packets from serial: {:?}",
+                        e
+                    )));
                 }
             }
         }
@@ -102,8 +104,6 @@ impl FileSource {
             }
         };
         let (maps, timestamp) = read_metadata().context("Failed to deserialize metadata header")?;
-        println!("{}", &maps);
-        println!("timestamp: {}", timestamp);
 
         Ok(Self {
             reader,
@@ -133,6 +133,7 @@ impl Iterator for FileSource {
 
 pub trait Sink {
     fn drain(&mut self, packets: TimestampedTracePackets) -> Result<()>;
+    fn describe(&self) -> String;
 }
 
 pub struct FileSink {
@@ -211,6 +212,10 @@ impl Sink for FileSink {
 
         Ok(())
     }
+
+    fn describe(&self) -> String {
+        format!("file output: {:?}", self.file)
+    }
 }
 
 pub struct FrontendSink {
@@ -219,30 +224,33 @@ pub struct FrontendSink {
 }
 
 impl FrontendSink {
-    pub fn connect(socket: &Path, maps: TaskResolveMaps) -> Result<Self> {
-        Ok(Self {
-            socket: std::os::unix::net::UnixStream::connect(socket)
-                .context("Failed to connect to frontend socket")?,
-            maps,
-        })
+    pub fn new(socket: std::os::unix::net::UnixStream, maps: TaskResolveMaps) -> Self {
+        Self { socket, maps }
     }
 }
 
 impl Sink for FrontendSink {
     fn drain(&mut self, packets: TimestampedTracePackets) -> Result<()> {
-        match self
-            .maps
-            .resolve_tasks(packets.clone())
-            .with_context(|| format!("Failed to resolve tasks for packets {:?}", packets))
-        {
+        match self.maps.resolve_tasks(packets.clone()) {
             Ok(packets) => {
                 let json = serde_json::to_string(&packets)?;
                 self.socket.write_all(json.as_bytes())?;
 
                 Ok(())
             }
-            Err(e) => bail!("{}, ignoring...", e),
+            // TODO move this handling up to main
+            Err(e) => {
+                eprintln!(
+                    "Failed to translate tasks for packets: {:?}. Reason: {}. Ignoring...",
+                    packets, e
+                );
+                Ok(())
+            }
         }
+    }
+
+    fn describe(&self) -> String {
+        format!("frontend using socket {:?}", self.socket)
     }
 }
 

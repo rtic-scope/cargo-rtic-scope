@@ -1,10 +1,11 @@
 use std::env;
 use std::fs;
+use std::io::BufRead;
 use std::path::PathBuf;
+use std::process;
 
 use anyhow::{bail, Context, Result};
 use probe_rs::{flashing, Probe};
-use rtic_scope_api::{self as api, Frontend};
 use structopt::StructOpt;
 
 mod build;
@@ -12,10 +13,12 @@ mod parse;
 mod serial;
 mod trace;
 
-use trace::Sink;
-
 #[derive(Debug, StructOpt)]
 struct Opts {
+    /// The frontend to forward recorded/replayed trace to.
+    #[structopt(long = "frontend", short = "-F", default_value = "dummy")]
+    frontend: String,
+
     #[structopt(subcommand)]
     cmd: Command,
 }
@@ -50,7 +53,7 @@ struct TraceOpts {
 }
 
 /// Replay a previously recorded trace stream for post-mortem analysis.
-#[derive(StructOpt, Debug)]
+#[derive(StructOpt, Debug, Clone)]
 struct ReplayOpts {
     #[structopt(name = "list", long = "list", short = "l")]
     list: bool,
@@ -81,19 +84,58 @@ fn main() -> Result<()> {
         env::args().skip(1),
     );
 
-    let (tx, rx) = std::sync::mpsc::channel();
-    let frontend = rtic_scope_frontend_dummy::Dummy::spawn(rx)?;
-
-    match opts.cmd {
-        Command::Trace(opts) => trace(opts, tx)?,
-        Command::Replay(opts) => replay(opts, tx)?,
+    // Configure source and sinks. Recover the information we need to
+    // map IRQ numbers to RTIC tasks.
+    let (source, mut sinks, maps) = match opts.cmd {
+        Command::Trace(opts) => trace(opts).context("Failed to capture trace")?.unwrap(), // NOTE(unwrap): trace always returns Some
+        Command::Replay(opts) => {
+            match replay(opts.clone()).with_context(|| {
+                format!("Failed to {}", {
+                    if opts.list {
+                        "index traces"
+                    } else {
+                        "replay trace"
+                    }
+                })
+            })? {
+                Some(tup) => tup,
+                None => return Ok(()), // NOTE --list was passed
+            }
+        }
     };
 
-    frontend
-        .join()
-        .expect("Failed to join frontend thread")
-        .context("Frontend reported error")?;
+    println!("{}", &maps);
 
+    // Spawn frontend child and get path to socket. Create and push sink.
+    let mut child = process::Command::new(format!("rtic-scope-frontend-{}", opts.frontend))
+        .stdout(process::Stdio::piped())
+        .spawn()
+        .context("Failed to spawn frontend child process")?;
+    {
+        let socket_path = {
+            std::io::BufReader::new(child.stdout.take().context("Failed to take stdout")?)
+                .lines()
+                .next()
+                .context("next() failed")?
+        }
+        .context("Failed to read socket path from frontend child process")?;
+        let socket = std::os::unix::net::UnixStream::connect(&socket_path)
+            .context("Failed to connect to frontend socket")?;
+        sinks.push(Box::new(trace::FrontendSink::new(socket, maps)));
+    }
+
+    // All preparatory I/O and information recovery done. Forward all
+    // trace packets to all sinks.
+    for packets in source.into_iter() {
+        let packets = packets.context("Failed to read trace packets from source")?;
+
+        for sink in sinks.iter_mut() {
+            sink.drain(packets.clone())
+                .with_context(|| format!("Failed to drain trace packets to {}", sink.describe()))?;
+        }
+    }
+
+    child.kill().context("Frontend terminated prematurely")?;
     Ok(())
 }
 
@@ -117,7 +159,13 @@ fn build_target_binary(
     Ok((cargo, artifact))
 }
 
-fn trace(opts: TraceOpts, tx: std::sync::mpsc::Sender<api::EventChunk>) -> Result<()> {
+type TraceTuple = (
+    Box<dyn Iterator<Item = Result<itm_decode::TimestampedTracePackets>>>,
+    Vec<Box<dyn trace::Sink>>,
+    parse::TaskResolveMaps,
+);
+
+fn trace(opts: TraceOpts) -> Result<Option<TraceTuple>> {
     // Attach to target and prepare serial. We want to fail fast on any
     // I/O issues.
     //
@@ -153,7 +201,6 @@ fn trace(opts: TraceOpts, tx: std::sync::mpsc::Sender<api::EventChunk>) -> Resul
         .context("Failed to parse RTIC application source file")?
         .resolve()
         .context("Failed to resolve tasks")?;
-    println!("{}", &maps);
 
     // Flash binary to target
     //
@@ -182,15 +229,14 @@ fn trace(opts: TraceOpts, tx: std::sync::mpsc::Sender<api::EventChunk>) -> Resul
         Ok(())
     })?;
 
-    println!("Tracing...");
-    for packets in trace_tty.into_iter() {
-        trace_sink.drain(packets?)?;
-    }
-
-    Ok(())
+    Ok(Some((
+        Box::new(trace_tty),
+        vec![Box::new(trace_sink)],
+        maps,
+    )))
 }
 
-fn replay(opts: ReplayOpts, tx: std::sync::mpsc::Sender<api::EventChunk>) -> Result<()> {
+fn replay(opts: ReplayOpts) -> Result<Option<TraceTuple>> {
     let mut traces = trace::find_trace_files(&{
         if let Some(dir) = opts.trace_dir {
             dir
@@ -204,6 +250,8 @@ fn replay(opts: ReplayOpts, tx: std::sync::mpsc::Sender<api::EventChunk>) -> Res
         for (i, trace) in traces.enumerate() {
             println!("{}\t{}", i, trace.display());
         }
+
+        return Ok(None);
     } else if let Some(idx) = opts.index {
         let trace = traces
             .nth(idx)
@@ -213,20 +261,9 @@ fn replay(opts: ReplayOpts, tx: std::sync::mpsc::Sender<api::EventChunk>) -> Res
         // open trace file and print packets (for now)
         let src = trace::FileSource::new(fs::OpenOptions::new().read(true).open(&trace)?)?;
         let maps = src.copy_maps();
-        for p in src.into_iter() {
-            let p = p?;
-            match maps
-                .resolve_tasks(p.clone())
-                .with_context(|| format!("Failed to resolve tasks for packets {:?}", p))
-            {
-                Ok(packets) => {
-                    tx.send(packets)
-                        .context("Failed to send EventChunk to frontend")?;
-                }
-                Err(e) => eprintln!("{}, ignoring...", e),
-            }
-        }
+
+        return Ok(Some((Box::new(src), vec![], maps)));
     }
 
-    Ok(())
+    unreachable!();
 }
