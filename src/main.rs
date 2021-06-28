@@ -137,16 +137,35 @@ fn main() -> Result<()> {
 
     // All preparatory I/O and information recovery done. Forward all
     // trace packets to all sinks.
+    //
+    // Keep tabs on which sinks have broken during drain, if any.
+    let mut sinks: Vec<(Box<dyn sinks::Sink>, bool)> =
+        sinks.drain(..).map(|s| (s, false)).collect();
     for packets in source.into_iter() {
         let packets = packets.context("Failed to read trace packets from source")?;
 
-        for sink in sinks.iter_mut() {
-            sink.drain(packets.clone())
-                .with_context(|| format!("Failed to drain trace packets to {}", sink.describe()))?;
+        for (sink, is_broken) in sinks.iter_mut() {
+            if let Err(e) = sink.drain(packets.clone()) {
+                eprintln!(
+                    "Failed to drain trace packets to {}: {:#}",
+                    sink.describe(),
+                    e
+                );
+                *is_broken = true;
+            }
+        }
+
+        // remove all broken sinks
+        //
+        // TODO replace weth Vec::drain_filter when stable.
+        sinks.retain(|(_, is_broken)| !is_broken);
+        if sinks.is_empty() {
+            break;
         }
     }
 
     // close socket to frontend
+    let sinks_broken = sinks.is_empty();
     drop(sinks);
 
     // Wait for frontend to proccess all packets and echo its stderr
@@ -156,6 +175,10 @@ fn main() -> Result<()> {
             eprintln!("{}: {}", opts.frontend, err?);
         }
         status.context("Frontend exited with error")?;
+    }
+
+    if sinks_broken {
+        bail!("All sinks broken. Cannot continue.");
     }
 
     Ok(())
