@@ -9,9 +9,10 @@ use probe_rs::{flashing, Probe};
 use structopt::StructOpt;
 
 mod build;
-mod parse;
+mod recovery;
 mod serial;
-mod trace;
+mod sinks;
+mod sources;
 
 #[derive(Debug, StructOpt)]
 struct Opts {
@@ -127,7 +128,7 @@ fn main() -> Result<()> {
         .context("Failed to read socket path from frontend child process")?;
         let socket = std::os::unix::net::UnixStream::connect(&socket_path)
             .context("Failed to connect to frontend socket")?;
-        sinks.push(Box::new(trace::FrontendSink::new(socket, maps)));
+        sinks.push(Box::new(sinks::FrontendSink::new(socket, maps)));
     }
     let stderr = child
         .stderr
@@ -182,8 +183,8 @@ fn build_target_binary(
 
 type TraceTuple = (
     Box<dyn Iterator<Item = Result<itm_decode::TimestampedTracePackets>>>,
-    Vec<Box<dyn trace::Sink>>,
-    parse::TaskResolveMaps,
+    Vec<Box<dyn sinks::Sink>>,
+    recovery::TaskResolveMaps,
 );
 
 fn trace(opts: TraceOpts) -> Result<Option<TraceTuple>> {
@@ -200,7 +201,7 @@ fn trace(opts: TraceOpts) -> Result<Option<TraceTuple>> {
         .attach("stm32f401re")
         .context("Failed to attach to stm32f401re")?;
 
-    let trace_tty = trace::TtySource::new(
+    let trace_tty = sources::TtySource::new(
         serial::configure(&opts.serial)
             .with_context(|| format!("Failed to configure {}", opts.serial))?,
     );
@@ -208,7 +209,7 @@ fn trace(opts: TraceOpts) -> Result<Option<TraceTuple>> {
     let (cargo, artifact) = build_target_binary(&opts.bin, vec![])?;
 
     // TODO make this into Sink::generate().remove_old(), etc.
-    let mut trace_sink = trace::FileSink::generate_trace_file(
+    let mut trace_sink = sinks::FileSink::generate_trace_file(
         &artifact,
         &opts
             .trace_dir
@@ -218,7 +219,7 @@ fn trace(opts: TraceOpts) -> Result<Option<TraceTuple>> {
     .context("Failed to generate trace sink file")?;
 
     // Map IRQ numbers and DWT matches to their respective RTIC tasks
-    let maps = parse::TaskResolver::new(&artifact, &cargo)
+    let maps = recovery::TaskResolver::new(&artifact, &cargo)
         .context("Failed to parse RTIC application source file")?
         .resolve()
         .context("Failed to resolve tasks")?;
@@ -258,7 +259,7 @@ fn trace(opts: TraceOpts) -> Result<Option<TraceTuple>> {
 }
 
 fn replay(opts: ReplayOpts) -> Result<Option<TraceTuple>> {
-    let mut traces = trace::find_trace_files(&{
+    let mut traces = sinks::find_trace_files(&{
         if let Some(dir) = opts.trace_dir {
             dir
         } else {
@@ -280,7 +281,7 @@ fn replay(opts: ReplayOpts) -> Result<Option<TraceTuple>> {
         eprintln!("Replaying {}", trace.display());
 
         // open trace file and print packets (for now)
-        let src = trace::FileSource::new(fs::OpenOptions::new().read(true).open(&trace)?)?;
+        let src = sources::FileSource::new(fs::OpenOptions::new().read(true).open(&trace)?)?;
         let maps = src.copy_maps();
 
         return Ok(Some((Box::new(src), vec![], maps)));
