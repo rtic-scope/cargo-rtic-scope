@@ -10,7 +10,6 @@ edition = "2018"
 structopt = "0.3"
 clap = "2.33"
 cargo_metadata = "0.11"
-anyhow = "1"
 syn = "1"
 proc-macro2 = "1"
 quote = "1"
@@ -24,7 +23,10 @@ serde = "1"
 serde_json = "1"
 rtic-scope-api = { git = "https://github.com/rtic-scope/api.git" }
 tempfile = "3"
-rtic-scope-frontend-dummy = { git = "https://github.com/rtic-scope/frontend-dummy.git" }
+
+[dependencies.anyhow]
+version = "1"
+features = ["backtrace"]
 
 [dependencies.serialport]
 version = "4"
