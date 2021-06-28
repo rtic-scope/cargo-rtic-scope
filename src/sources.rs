@@ -1,10 +1,9 @@
-use crate::recovery::TaskResolveMaps;
+use crate::recovery::Metadata;
 
 use std::fs;
 use std::io::{BufReader, Read};
 
 use anyhow::{anyhow, bail, Context, Result};
-use chrono::prelude::*;
 use itm_decode::{Decoder, DecoderState, TimestampedTracePackets};
 use serde_json;
 
@@ -14,8 +13,7 @@ use serde_json;
 /// Something data is deserialized from. Always a file.
 pub struct FileSource {
     reader: BufReader<fs::File>,
-    maps: TaskResolveMaps,
-    _timestamp: chrono::DateTime<Local>,
+    metadata: Metadata,
 }
 
 pub struct TtySource {
@@ -66,48 +64,22 @@ impl Iterator for TtySource {
 
 impl FileSource {
     pub fn new(fd: fs::File) -> Result<Self> {
-        use serde_json::Value;
-
         let mut reader = BufReader::new(fd);
-
-        let mut read_metadata = || {
+        let metadata = {
             let mut stream =
-                serde_json::Deserializer::from_reader(&mut reader).into_iter::<Value>();
-            if let Some(Ok(Value::Array(metadata))) = stream.next() {
-                let maps: TaskResolveMaps = serde_json::from_value(
-                    metadata
-                        .iter()
-                        .nth(0) // XXX magic
-                        .context("Resolve map object missing")?
-                        .clone(),
-                )
-                .context("Failed to deserialize resolve map object")?;
-
-                let timestamp: chrono::DateTime<Local> = serde_json::from_value(
-                    metadata
-                        .iter()
-                        .nth(1) // XXX magic
-                        .context("Reset timestamp string missing")?
-                        .clone(),
-                )
-                .context("Failed to deserialize reset timestamp string")?;
-
-                Ok((maps, timestamp))
+                serde_json::Deserializer::from_reader(&mut reader).into_iter::<Metadata>();
+            if let Some(Ok(metadata)) = stream.next() {
+                metadata
             } else {
-                bail!("Expected metadata header missing from trace file");
+                bail!("Failed to deserialize metadata header");
             }
         };
-        let (maps, timestamp) = read_metadata().context("Failed to deserialize metadata header")?;
 
-        Ok(Self {
-            reader,
-            maps,
-            _timestamp: timestamp,
-        })
+        Ok(Self { reader, metadata })
     }
 
-    pub fn copy_maps(&self) -> TaskResolveMaps {
-        self.maps.clone()
+    pub fn metadata(&self) -> Metadata {
+        self.metadata.clone()
     }
 }
 

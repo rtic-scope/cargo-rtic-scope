@@ -7,6 +7,7 @@ use std::io::Write;
 
 use anyhow::{bail, Context, Result};
 use cargo_metadata::Artifact;
+use chrono::Local;
 use include_dir::include_dir;
 use itm_decode::{ExceptionAction, TimestampedTracePackets, TracePacket};
 use libloading;
@@ -24,6 +25,90 @@ type TaskIdent = [String; 2];
 type ExternalHwAssocs = BTreeMap<HwExceptionNumber, (TaskIdent, ExceptionIdent)>;
 type InternalHwAssocs = BTreeMap<ExceptionIdent, TaskIdent>;
 type SwAssocs = BTreeMap<SwExceptionNumber, Vec<String>>;
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Metadata {
+    maps: TaskResolveMaps,
+    timestamp: chrono::DateTime<Local>,
+    freq: usize,
+}
+
+impl Metadata {
+    pub fn new(maps: TaskResolveMaps, timestamp: chrono::DateTime<Local>, freq: usize) -> Self {
+        Self {
+            maps,
+            timestamp,
+            freq,
+        }
+    }
+
+    pub fn resolve_event_chunk(&self, packets: TimestampedTracePackets) -> Result<EventChunk> {
+        let timestamp = || -> Result<chrono::DateTime<Local>> {
+            // TODO handle all fields
+            let itm_decode::Timestamp { base, delta, .. } = packets.timestamp;
+            let seconds_since =
+                (base.unwrap_or(0) + delta.context("delta missing")?) as f64 / self.freq as f64;
+            let since = chrono::Duration::nanoseconds((seconds_since * 1e9).round() as i64);
+            Ok(self.timestamp + since)
+        }()
+        .context("Failed to resolve absolute timestamp")?;
+
+        let resolve_exception = |&excpt| -> Result<String> {
+            use itm_decode::cortex_m::VectActive;
+
+            match excpt {
+                VectActive::ThreadMode => bail!("Don't know what to do with ThreadMode"), // XXX fix
+                VectActive::Exception(e) => Ok(self
+                    .maps
+                    .exceptions
+                    .get(&format!("{:?}", e))
+                    .with_context(|| format!("Exception map is missing key {:?}", e))?
+                    .join("::")),
+                VectActive::Interrupt { irqn } => {
+                    let (fun, _bind) = self
+                        .maps
+                        .interrupts
+                        .get(&irqn)
+                        .with_context(|| format!("Interrupt map is missing key {}", irqn))?;
+                    Ok(fun.join("::"))
+                }
+            }
+        };
+
+        // convert itm_decode::TracePacket -> api::EventType
+        let mut events = vec![];
+        for packet in packets.packets.iter() {
+            match packet {
+                TracePacket::Overflow => {
+                    events.push(EventType::Overflow);
+                }
+                TracePacket::ExceptionTrace { exception, action } => events.push(EventType::Task {
+                    name: resolve_exception(exception)?,
+                    action: match action {
+                        ExceptionAction::Entered => TaskAction::Entered,
+                        ExceptionAction::Exited => TaskAction::Exited,
+                        ExceptionAction::Returned => TaskAction::Returned,
+                    },
+                }),
+                _ => {
+                    eprintln!("Don't know how to convert {:?}. Skipping...", packet);
+                }
+            }
+        }
+
+        Ok(EventChunk { timestamp, events })
+    }
+}
+
+impl fmt::Display for Metadata {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "{}", self.maps)?;
+        writeln!(f, "reset timestamp: {}", self.timestamp)?;
+        writeln!(f, "trace clock frequency: {} Hz", self.freq)?;
+
+        Ok(())
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct TaskResolveMaps {
@@ -49,59 +134,6 @@ impl fmt::Display for TaskResolveMaps {
         display_map!("exceptions", self.exceptions)?;
         display_map!("interrupts", self.interrupts)?;
         display_map!("software tasks", self.sw_assocs)
-    }
-}
-
-impl TaskResolveMaps {
-    pub fn resolve_tasks(&self, ts_packets: TimestampedTracePackets) -> Result<EventChunk> {
-        // XXX resolve correct DateTime
-        let _unfixed_ts = ts_packets.timestamp;
-
-        let resolve_exception = |&excpt| -> Result<String> {
-            use itm_decode::cortex_m::VectActive;
-
-            match excpt {
-                VectActive::ThreadMode => bail!("Don't know what to do with ThreadMode"), // XXX fix
-                VectActive::Exception(e) => Ok(self
-                    .exceptions
-                    .get(&format!("{:?}", e))
-                    .with_context(|| format!("Exception map is missing key {:?}", e))?
-                    .join("::")),
-                VectActive::Interrupt { irqn } => {
-                    let (fun, _bind) = self
-                        .interrupts
-                        .get(&irqn)
-                        .with_context(|| format!("Interrupt map is missing key {}", irqn))?;
-                    Ok(fun.join("::"))
-                }
-            }
-        };
-
-        // convert itm_decode::TracePacket -> api::EventType
-        let mut events = vec![];
-        for packet in ts_packets.packets.iter() {
-            match packet {
-                TracePacket::Overflow => {
-                    events.push(EventType::Overflow);
-                }
-                TracePacket::ExceptionTrace { exception, action } => events.push(EventType::Task {
-                    name: resolve_exception(exception)?,
-                    action: match action {
-                        ExceptionAction::Entered => TaskAction::Entered,
-                        ExceptionAction::Exited => TaskAction::Exited,
-                        ExceptionAction::Returned => TaskAction::Returned,
-                    },
-                }),
-                _ => {
-                    eprintln!("Don't know how to convert {:?}. Skipping...", packet);
-                }
-            }
-        }
-
-        Ok(EventChunk {
-            timestamp: chrono::prelude::Local::now(),
-            events,
-        })
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::recovery::TaskResolveMaps;
+use crate::recovery::{Metadata, TaskResolveMaps};
 
 use std::fs;
 use std::io::Write;
@@ -9,7 +9,6 @@ use cargo_metadata::Artifact;
 use chrono::prelude::*;
 use git2::{DescribeFormatOptions, DescribeOptions, Repository};
 use itm_decode::TimestampedTracePackets;
-use serde::ser::{SerializeSeq, Serializer};
 use serde_json;
 
 const TRACE_FILE_EXT: &'static str = ".trace";
@@ -62,29 +61,24 @@ impl FileSink {
 
     /// Initializes the sink with metadata: task resolve maps and target
     /// reset timestamp.
-    pub fn init<F>(&mut self, maps: &TaskResolveMaps, reset_fun: F) -> Result<()>
+    pub fn init<F>(&mut self, maps: TaskResolveMaps, freq: usize, reset_fun: F) -> Result<Metadata>
     where
         F: FnOnce() -> Result<()>,
     {
+        let ts = Local::now();
+        reset_fun().context("Failed to reset target")?;
+
         // Create a trace file header with metadata (maps, reset
-        // timestamp). Any bytes after this sequence refers to trace
-        // packets.
-        //
-        // A trace file will then contain: [maps, timestamp], [packets,
-        // ...]
-        let mut ser = serde_json::Serializer::new(&mut self.file);
-        let mut seq = ser.serialize_seq(Some(2))?;
+        // timestamp, trace clock frequency). Any bytes after this
+        // sequence refers to trace packets.
+        let metadata = Metadata::new(maps, ts, freq);
         {
-            seq.serialize_element(maps)?;
-
-            let ts = Local::now();
-            reset_fun().context("Failed to reset target")?;
-
-            seq.serialize_element(&ts)?;
-            seq.end()?;
+            let json = serde_json::to_string(&metadata)?;
+            self.file.write_all(json.as_bytes())
         }
+        .context("Failed to write metadata do file")?;
 
-        Ok(())
+        Ok(metadata)
     }
 }
 
@@ -103,28 +97,26 @@ impl Sink for FileSink {
 
 pub struct FrontendSink {
     socket: std::os::unix::net::UnixStream,
-    maps: TaskResolveMaps,
+    metadata: Metadata,
 }
 
 impl FrontendSink {
-    pub fn new(socket: std::os::unix::net::UnixStream, maps: TaskResolveMaps) -> Self {
-        Self { socket, maps }
+    pub fn new(socket: std::os::unix::net::UnixStream, metadata: Metadata) -> Self {
+        Self { socket, metadata }
     }
 }
 
 impl Sink for FrontendSink {
     fn drain(&mut self, packets: TimestampedTracePackets) -> Result<()> {
-        match self.maps.resolve_tasks(packets.clone()) {
+        match self.metadata.resolve_event_chunk(packets.clone()) {
             Ok(packets) => {
                 let json = serde_json::to_string(&packets)?;
-                self.socket.write_all(json.as_bytes())?;
-
-                Ok(())
+                self.socket.write_all(json.as_bytes())
             }
-            // TODO move this handling up to main
+            .context("Failed to forward api::EventChunk to frontend"),
             Err(e) => {
                 eprintln!(
-                    "Failed to translate tasks for packets: {:?}. Reason: {}. Ignoring...",
+                    "Failed to resolve chunk from {:?}. Reason: {}. Ignoring...",
                     packets, e
                 );
                 Ok(())

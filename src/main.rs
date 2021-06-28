@@ -51,6 +51,10 @@ struct TraceOpts {
     /// Remove all previous traces from <trace-dir>.
     #[structopt(long = "clear-traces")]
     remove_prev_traces: bool,
+
+    /// Frequency of the trace clock.
+    #[structopt(long = "freq")]
+    trace_clk_freq: usize,
 }
 
 /// Replay a previously recorded trace stream for post-mortem analysis.
@@ -87,7 +91,7 @@ fn main() -> Result<()> {
 
     // Configure source and sinks. Recover the information we need to
     // map IRQ numbers to RTIC tasks.
-    let (source, mut sinks, maps) = match opts.cmd {
+    let (source, mut sinks, metadata) = match opts.cmd {
         Command::Trace(ref opts) => trace(opts).context("Failed to capture trace")?.unwrap(), // NOTE(unwrap): trace always returns Some
         Command::Replay(ref opts) => {
             match replay(opts).with_context(|| {
@@ -105,7 +109,7 @@ fn main() -> Result<()> {
         }
     };
 
-    eprintln!("{}", &maps);
+    eprintln!("{}", &metadata);
 
     // Spawn frontend child and get path to socket. Create and push sink.
     let mut child = process::Command::new(format!("rtic-scope-frontend-{}", opts.frontend))
@@ -128,7 +132,7 @@ fn main() -> Result<()> {
         .context("Failed to read socket path from frontend child process")?;
         let socket = std::os::unix::net::UnixStream::connect(&socket_path)
             .context("Failed to connect to frontend socket")?;
-        sinks.push(Box::new(sinks::FrontendSink::new(socket, maps)));
+        sinks.push(Box::new(sinks::FrontendSink::new(socket, metadata)));
     }
     let stderr = child
         .stderr
@@ -207,7 +211,7 @@ fn build_target_binary(
 type TraceTuple = (
     Box<dyn Iterator<Item = Result<itm_decode::TimestampedTracePackets>>>,
     Vec<Box<dyn sinks::Sink>>,
-    recovery::TaskResolveMaps,
+    recovery::Metadata,
 );
 
 fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
@@ -264,7 +268,7 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
     eprintln!("Flashed.");
 
     // Sample the timestamp of target reset, flush metadata to file.
-    trace_sink.init(&maps, || {
+    let metadata = trace_sink.init(maps, opts.trace_clk_freq, || {
         // Reset the target to  execute flashed binary
         eprintln!("Resetting target...");
         let mut core = session.core(0)?;
@@ -277,7 +281,7 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
     Ok(Some((
         Box::new(trace_tty),
         vec![Box::new(trace_sink)],
-        maps,
+        metadata,
     )))
 }
 
@@ -305,9 +309,9 @@ fn replay(opts: &ReplayOpts) -> Result<Option<TraceTuple>> {
 
         // open trace file and print packets (for now)
         let src = sources::FileSource::new(fs::OpenOptions::new().read(true).open(&trace)?)?;
-        let maps = src.copy_maps();
+        let metadata = src.metadata();
 
-        return Ok(Some((Box::new(src), vec![], maps)));
+        return Ok(Some((Box::new(src), vec![], metadata)));
     }
 
     unreachable!();
