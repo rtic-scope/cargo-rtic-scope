@@ -1,6 +1,6 @@
 use std::env;
 use std::fs;
-use std::io::BufRead;
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process;
 
@@ -104,25 +104,35 @@ fn main() -> Result<()> {
         }
     };
 
-    println!("{}", &maps);
+    eprintln!("{}", &maps);
 
     // Spawn frontend child and get path to socket. Create and push sink.
     let mut child = process::Command::new(format!("rtic-scope-frontend-{}", opts.frontend))
         .stdout(process::Stdio::piped())
+        .stderr(process::Stdio::piped())
         .spawn()
         .context("Failed to spawn frontend child process")?;
     {
         let socket_path = {
-            std::io::BufReader::new(child.stdout.take().context("Failed to take stdout")?)
-                .lines()
-                .next()
-                .context("next() failed")?
+            std::io::BufReader::new(
+                child
+                    .stdout
+                    .take()
+                    .context("Failed to pipe frontend stdout")?,
+            )
+            .lines()
+            .next()
+            .context("next() failed")?
         }
         .context("Failed to read socket path from frontend child process")?;
         let socket = std::os::unix::net::UnixStream::connect(&socket_path)
             .context("Failed to connect to frontend socket")?;
         sinks.push(Box::new(trace::FrontendSink::new(socket, maps)));
     }
+    let stderr = child
+        .stderr
+        .take()
+        .context("Failed to pipe frontend stderr")?;
 
     // All preparatory I/O and information recovery done. Forward all
     // trace packets to all sinks.
@@ -135,7 +145,18 @@ fn main() -> Result<()> {
         }
     }
 
-    child.kill().context("Frontend terminated prematurely")?;
+    // close socket to frontend
+    drop(sinks);
+
+    // Wait for frontend to proccess all packets and echo its stderr
+    {
+        let status = child.wait();
+        for err in BufReader::new(stderr).lines() {
+            eprintln!("{}: {}", opts.frontend, err?);
+        }
+        status.context("Frontend exited with error")?;
+    }
+
     Ok(())
 }
 
@@ -209,22 +230,22 @@ fn trace(opts: TraceOpts) -> Result<Option<TraceTuple>> {
     // TODO skip flash if correct bin already flashed. We check that by
     // downloding the binary and comparing hashes (unless there is HW
     // that does this for us)
-    println!("Flashing {}...", opts.bin);
+    eprintln!("Flashing {}...", opts.bin);
     flashing::download_file(
         &mut session,
         &artifact.executable.unwrap(),
         flashing::Format::Elf,
     )
     .context("Failed to flash target firmware")?;
-    println!("Flashed.");
+    eprintln!("Flashed.");
 
     // Sample the timestamp of target reset, flush metadata to file.
     trace_sink.init(&maps, || {
         // Reset the target to  execute flashed binary
-        println!("Resetting target...");
+        eprintln!("Resetting target...");
         let mut core = session.core(0)?;
         core.reset().context("Unable to reset target")?;
-        println!("Reset.");
+        eprintln!("Reset.");
 
         Ok(())
     })?;
@@ -256,7 +277,7 @@ fn replay(opts: ReplayOpts) -> Result<Option<TraceTuple>> {
         let trace = traces
             .nth(idx)
             .with_context(|| format!("No trace with index {}", idx))?;
-        println!("Replaying {}", trace.display());
+        eprintln!("Replaying {}", trace.display());
 
         // open trace file and print packets (for now)
         let src = trace::FileSource::new(fs::OpenOptions::new().read(true).open(&trace)?)?;
