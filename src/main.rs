@@ -172,6 +172,8 @@ fn main() -> Result<()> {
     let sinks_broken = sinks.is_empty();
     drop(sinks);
 
+    // TODO make sure the below is executed on SIGINT
+
     // Wait for frontend to proccess all packets and echo its stderr
     {
         let status = child.wait();
