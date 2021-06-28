@@ -11,11 +11,17 @@ fn main() -> Result<()> {
         .context("Failed to bind frontend socket")?;
     println!("{}", socket_path.display());
 
-    // Deserialize api::EventChunks from socket and print them to stderr
+    // Deserialize api::EventChunks from socket and print events to
+    // stderr along with nanoseconds timestamp.
     let (socket, _addr) = listener.accept().context("Failed to accept()")?;
     let stream = Deserializer::from_reader(socket).into_iter::<api::EventChunk>();
+    let mut prev_nanos = 0;
     for chunk in stream {
-        eprintln!("{:?}", chunk.context("Failed to deserialize chunk")?);
+        let chunk = chunk.context("Failed to deserialize chunk")?;
+        let nanos = chunk.timestamp.timestamp_nanos();
+        let diff = nanos - prev_nanos;
+        eprintln!("@{} ns (+{} ns): {:?}", nanos, diff, chunk.events);
+        prev_nanos = nanos;
     }
 
     Ok(())
