@@ -2,7 +2,7 @@ use crate::recovery::TaskResolveMaps;
 
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 use cargo_metadata::Artifact;
@@ -30,7 +30,7 @@ impl FileSink {
         remove_prev_traces: bool,
     ) -> Result<Self> {
         if remove_prev_traces {
-            for trace in find_trace_files(trace_dir)? {
+            for trace in find_trace_files(trace_dir.to_path_buf())? {
                 fs::remove_file(trace).context("Failed to remove previous trace file")?;
             }
         }
@@ -138,7 +138,7 @@ impl Sink for FrontendSink {
 }
 
 /// ls `*.trace` in given path.
-pub fn find_trace_files(path: &Path) -> Result<impl Iterator<Item = PathBuf>> {
+pub fn find_trace_files(path: PathBuf) -> Result<impl Iterator<Item = PathBuf>> {
     Ok(fs::read_dir(path)
         .context("Failed to read trace directory")?
         // we only care about files we can access

@@ -88,9 +88,9 @@ fn main() -> Result<()> {
     // Configure source and sinks. Recover the information we need to
     // map IRQ numbers to RTIC tasks.
     let (source, mut sinks, maps) = match opts.cmd {
-        Command::Trace(opts) => trace(opts).context("Failed to capture trace")?.unwrap(), // NOTE(unwrap): trace always returns Some
-        Command::Replay(opts) => {
-            match replay(opts.clone()).with_context(|| {
+        Command::Trace(ref opts) => trace(opts).context("Failed to capture trace")?.unwrap(), // NOTE(unwrap): trace always returns Some
+        Command::Replay(ref opts) => {
+            match replay(opts).with_context(|| {
                 format!("Failed to {}", {
                     if opts.list {
                         "index traces"
@@ -147,7 +147,7 @@ fn main() -> Result<()> {
         for (sink, is_broken) in sinks.iter_mut() {
             if let Err(e) = sink.drain(packets.clone()) {
                 eprintln!(
-                    "Failed to drain trace packets to {}: {:#}",
+                    "Failed to drain trace packets to {}: {:?}",
                     sink.describe(),
                     e
                 );
@@ -174,7 +174,7 @@ fn main() -> Result<()> {
         for err in BufReader::new(stderr).lines() {
             eprintln!("{}: {}", opts.frontend, err?);
         }
-        status.context("Frontend exited with error")?;
+        status.with_context(|| format!("Frontend {} exited with error", opts.frontend))?;
     }
 
     if sinks_broken {
@@ -210,7 +210,7 @@ type TraceTuple = (
     recovery::TaskResolveMaps,
 );
 
-fn trace(opts: TraceOpts) -> Result<Option<TraceTuple>> {
+fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
     // Attach to target and prepare serial. We want to fail fast on any
     // I/O issues.
     //
@@ -234,9 +234,9 @@ fn trace(opts: TraceOpts) -> Result<Option<TraceTuple>> {
     // TODO make this into Sink::generate().remove_old(), etc.
     let mut trace_sink = sinks::FileSink::generate_trace_file(
         &artifact,
-        &opts
-            .trace_dir
-            .unwrap_or(cargo.target_dir().unwrap().join("rtic-traces")),
+        opts.trace_dir
+            .as_ref()
+            .unwrap_or(&cargo.target_dir().unwrap().join("rtic-traces")),
         opts.remove_prev_traces,
     )
     .context("Failed to generate trace sink file")?;
@@ -281,12 +281,12 @@ fn trace(opts: TraceOpts) -> Result<Option<TraceTuple>> {
     )))
 }
 
-fn replay(opts: ReplayOpts) -> Result<Option<TraceTuple>> {
-    let mut traces = sinks::find_trace_files(&{
-        if let Some(dir) = opts.trace_dir {
-            dir
+fn replay(opts: &ReplayOpts) -> Result<Option<TraceTuple>> {
+    let mut traces = sinks::find_trace_files({
+        if let Some(ref dir) = opts.trace_dir {
+            dir.to_path_buf()
         } else {
-            let (cargo, _artifact) = build_target_binary(&opts.bin.unwrap(), vec![])?;
+            let (cargo, _artifact) = build_target_binary(opts.bin.as_ref().unwrap(), vec![])?;
             cargo.target_dir().unwrap().join("rtic-traces")
         }
     })?;
