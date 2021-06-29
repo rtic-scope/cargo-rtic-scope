@@ -191,7 +191,7 @@ checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
 name = "cargo-rtic-scope"
-version = "0.1.0"
+version = "0.1.0-alpha.0"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -199,7 +199,7 @@ dependencies = [
  "clap",
  "git2",
  "include_dir",
- "itm-decode 0.4.0 (git+https://github.com/tmplt/itm-decode.git)",
+ "itm-decode 0.4.0-alpha.0",
  "libloading",
  "nix 0.21.0",
  "probe-rs",
@@ -617,8 +617,9 @@ dependencies = [
 
 [[package]]
 name = "itm-decode"
-version = "0.4.0"
-source = "git+https://github.com/rtic-scope/itm-decode.git#8dba46bc12d024656a6990a8c4f10efd2558645b"
+version = "0.4.0-alpha.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b2ce7e46f122ad8793b76d463973569e82b18479d28515f48df9adfbcb5d44e"
 dependencies = [
  "anyhow",
  "bitmatch",
@@ -631,7 +632,7 @@ dependencies = [
 [[package]]
 name = "itm-decode"
 version = "0.4.0"
-source = "git+https://github.com/tmplt/itm-decode.git#8dba46bc12d024656a6990a8c4f10efd2558645b"
+source = "git+https://github.com/rtic-scope/itm-decode.git#8dba46bc12d024656a6990a8c4f10efd2558645b"
 dependencies = [
  "anyhow",
  "bitmatch",
@@ -1123,14 +1124,15 @@ source = "git+https://github.com/rtic-scope/api.git#e96de4f4b8e06fbfc3215d9c9552
 dependencies = [
  "anyhow",
  "chrono",
- "itm-decode 0.4.0 (git+https://github.com/rtic-scope/itm-decode.git)",
+ "itm-decode 0.4.0",
  "serde",
 ]
 
 [[package]]
 name = "rtic-syntax"
 version = "0.5.0-alpha.3"
-source = "git+https://github.com/rtic-rs/rtic-syntax.git#bf4ada43139dcf4f1b2ace6a1571cd59be9c954c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e761da64f9a1dd262b052cf2be81a5d3dab8009fda0dc08a7c88e5c623382a3"
 dependencies = [
  "indexmap",
  "proc-macro2",
