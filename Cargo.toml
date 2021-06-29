@@ -3,6 +3,7 @@ name = "cargo-rtic-scope"
 version = "0.1.0"
 authors = ["Viktor Sonesten <v@tmplt.dev>"]
 edition = "2018"
+build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -43,3 +44,7 @@ features = ["serde"]
 [dependencies.itm-decode]
 git = "https://github.com/tmplt/itm-decode.git"
 features = ["serde"]
+
+[build-dependencies]
+vergen = "5"
+anyhow = "1"
