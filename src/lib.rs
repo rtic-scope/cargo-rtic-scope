@@ -5,7 +5,7 @@
 //!
 //! - `tracing`: which offers setup functions that configures related
 //!   peripherals for RTIC task tracing, and a `#[trace]` macro for
-//!   software tasks. Example usage:
+//!   software tasks. Example usage (TODO update):
 //!   ```
 //!   #[app(device = stm32f4::stm32f401, peripherals = true, dispatchers = [EXTI1])]
 //!   mod app {
@@ -52,8 +52,9 @@ static mut WATCH_VARIABLE: u32 = 0;
 
 /// Auxilliary functions for peripheral configuration. Should be called
 /// in the init-function, and preferably in order of (1)
-/// [setup::core_peripherals]; (2) [setup::device_peripherals]; and
-/// last, (3) [setup::assign_dwt_unit]. Refer to crate example usage.
+/// [setup::core_peripherals]; (2) [setup::device_peripherals]; (3)
+/// [setup::assign_dwt_unit]; and last, (4)
+/// [setup::send_trace_clk_freq]. Refer to crate example usage.
 pub mod setup {
     use cortex_m::peripheral as Core;
     use cortex_m::peripheral::{
@@ -119,6 +120,16 @@ pub mod setup {
             access_type: AccessType::WriteOnly,
         }))
         .unwrap(); // NOTE safe: valid (emit, access_type) used
+    }
+
+    /// Sends the given frequency over ITM to the RTIC Scope backend to
+    /// be registered as the trace clock frequency. Used to convert
+    /// timestamp register values to absolute timestamps. Should only be
+    /// called once, and after [assign_dwt_unit].
+    pub fn send_trace_clk_freq(freq: u32) {
+        // Write all 4 bytes, which denote that the payload is a trace
+        // clock frequency.
+        super::__write_trace_payload(freq);
     }
 }
 
