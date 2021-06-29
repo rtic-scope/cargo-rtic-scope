@@ -18,4 +18,4 @@ features = ["stm32f401"]
 members = [ "macros" ]
 
 [patch.crates-io]
-cortex-m = { git = "https://github.com/tmplt/cortex-m.git", branch = "feat/tracing" }
+cortex-m = { git = "https://github.com/rtic-scope/cortex-m.git", branch = "feat/tracing" }
