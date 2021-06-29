@@ -43,7 +43,3 @@ features = ["serde"]
 [dependencies.itm-decode]
 git = "https://github.com/tmplt/itm-decode.git"
 features = ["serde"]
-
-[dependencies.tokio]
-version = "1"
-features = ["full"]
