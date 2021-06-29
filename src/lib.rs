@@ -1,11 +1,12 @@
 //! API used between RTIC Scope front- and backends.
 
 use chrono::prelude::Local;
+use serde::{Deserialize, Serialize};
+
+#[allow(unused_imports)]
 use itm_decode::ExceptionAction;
 #[allow(unused_imports)]
 use itm_decode::TracePacket;
-use serde::{Deserialize, Serialize};
-use anyhow::Result;
 
 type Timestamp = chrono::DateTime<Local>;
 
@@ -47,11 +48,4 @@ pub enum EventType {
         /// What did the RTIC task do?
         action: TaskAction,
     },
-}
-
-/// Required functionality of a RTIC Scope frontend.
-pub trait Frontend {
-    /// Spawns a thread that manages the frontend. Returned handle must
-    /// be joinable after the tx-sibling of rx has dropped.
-    fn spawn(rx: std::sync::mpsc::Receiver<EventChunk>) -> Result<std::thread::JoinHandle<Result<()>>>;
 }
