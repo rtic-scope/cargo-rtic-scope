@@ -6,6 +6,7 @@ edition = "2018"
 repository = "https://github.com/rtic-scope/api"
 homepage = "https://github.com/rtic-scope/api"
 description = "API used between RTIC Scope front- and backends"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 anyhow = "1"
