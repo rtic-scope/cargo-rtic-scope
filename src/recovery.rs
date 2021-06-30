@@ -30,11 +30,11 @@ type SwAssocs = BTreeMap<SwExceptionNumber, Vec<String>>;
 pub struct Metadata {
     maps: TaskResolveMaps,
     timestamp: chrono::DateTime<Local>,
-    freq: usize,
+    freq: u32,
 }
 
 impl Metadata {
-    pub fn new(maps: TaskResolveMaps, timestamp: chrono::DateTime<Local>, freq: usize) -> Self {
+    pub fn new(maps: TaskResolveMaps, timestamp: chrono::DateTime<Local>, freq: u32) -> Self {
         Self {
             maps,
             timestamp,

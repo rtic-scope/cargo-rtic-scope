@@ -61,17 +61,22 @@ impl FileSink {
 
     /// Initializes the sink with metadata: task resolve maps and target
     /// reset timestamp.
-    pub fn init<F>(&mut self, maps: TaskResolveMaps, freq: usize, reset_fun: F) -> Result<Metadata>
+    pub fn init<F>(
+        &mut self,
+        maps: TaskResolveMaps,
+        freq_override: Option<u32>,
+        reset_fun: F,
+    ) -> Result<Metadata>
     where
-        F: FnOnce() -> Result<()>,
+        F: FnOnce() -> Result<u32>,
     {
         let ts = Local::now();
-        reset_fun().context("Failed to reset target")?;
+        let freq = reset_fun()?;
 
         // Create a trace file header with metadata (maps, reset
         // timestamp, trace clock frequency). Any bytes after this
         // sequence refers to trace packets.
-        let metadata = Metadata::new(maps, ts, freq);
+        let metadata = Metadata::new(maps, ts, freq_override.unwrap_or(freq));
         {
             let json = serde_json::to_string(&metadata)?;
             self.file.write_all(json.as_bytes())

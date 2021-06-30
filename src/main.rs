@@ -53,9 +53,9 @@ struct TraceOpts {
     #[structopt(long = "clear-traces")]
     remove_prev_traces: bool,
 
-    /// Frequency of the trace clock.
+    /// Optional override of the trace clock frequency.
     #[structopt(long = "freq")]
-    trace_clk_freq: usize,
+    trace_clk_freq: Option<u32>,
 }
 
 /// Replay a previously recorded trace stream for post-mortem analysis.
@@ -231,7 +231,7 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
         .attach("stm32f401re")
         .context("Failed to attach to stm32f401re")?;
 
-    let trace_tty = sources::TtySource::new(
+    let mut trace_tty = sources::TtySource::new(
         serial::configure(&opts.serial)
             .with_context(|| format!("Failed to configure {}", opts.serial))?,
     );
@@ -270,16 +270,28 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
     .context("Failed to flash target firmware")?;
     eprintln!("Flashed.");
 
-    // Sample the timestamp of target reset, flush metadata to file.
-    let metadata = trace_sink.init(maps, opts.trace_clk_freq, || {
-        // Reset the target to  execute flashed binary
-        eprintln!("Resetting target...");
-        let mut core = session.core(0)?;
-        core.reset().context("Unable to reset target")?;
-        eprintln!("Reset.");
+    // Sample the timestamp of target reset, wait for trace clock
+    // frequency payload, flush metadata to file.
+    let metadata = trace_sink
+        .init(maps, opts.trace_clk_freq, || {
+            // Reset the target to  execute flashed binary
+            eprintln!("Resetting target...");
+            let mut core = session.core(0)?;
+            core.reset().context("Unable to reset target")?;
+            eprintln!("Reset.");
 
-        Ok(())
-    })?;
+            // Wait for a non-zero trace clock frequency payload.
+            //
+            // NOTE A side-effect here is that we effectively disregard all
+            // packets that are emitted during target initialization. In
+            // local tests these packets have been but noise, so this is
+            // okay for the moment.
+            let freq = sources::wait_for_trace_clk_freq(&mut trace_tty)
+                .context("Failed to read trace clock frequency from source")?;
+
+            Ok(freq)
+        })
+        .context("Failed to initialize metadata")?;
 
     Ok(Some((
         Box::new(trace_tty),
