@@ -199,7 +199,7 @@ dependencies = [
  "clap",
  "git2",
  "include_dir",
- "itm-decode 0.4.0-alpha.0",
+ "itm-decode",
  "libloading",
  "nix 0.21.0",
  "probe-rs",
@@ -523,9 +523,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.9.1"
+version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7afe4a420e3fe79967a00898cc1f4db7c8a49a9333a29f8a4bd76a253d5cd04"
+checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
 
 [[package]]
 name = "heck"
@@ -538,9 +538,9 @@ dependencies = [
 
 [[package]]
 name = "hermit-abi"
-version = "0.1.18"
+version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "322f4de77956e22ed0e5032c359a0f1273f1f7f0d79bfa3b8ffbc730d7fbcc5c"
+checksum = "62b467343b94ba476dcb2500d242dadbb39557df889310ac77c5d99100aaac33"
 dependencies = [
  "libc",
 ]
@@ -575,8 +575,9 @@ checksum = "365a784774bb381e8c19edb91190a90d7f2625e057b55de2bc0f6b57bc779ff2"
 
 [[package]]
 name = "include_dir"
-version = "0.6.1-alpha.0"
-source = "git+https://github.com/tmplt/include_dir.git?branch=feat/truncate#d91d15aff7df234501d17b1b94c92de8d3bfa64a"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31a924bd335356c7622dff9ee33d06920afcf7f762a1a991236645e08c8a484b"
 dependencies = [
  "glob",
  "include_dir_impl",
@@ -585,9 +586,9 @@ dependencies = [
 
 [[package]]
 name = "include_dir_impl"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "327869970574819d24d1dca25c891856144d29159ab797fa9dc725c5c3f57215"
+checksum = "afae3917f781921d7c7813992ccadff7e816f7e6ecb4b70a9ec3e740d51da3d6"
 dependencies = [
  "anyhow",
  "proc-macro-hack",
@@ -598,9 +599,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "1.6.2"
+version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "824845a0bf897a9042383849b02c1bc219c2383772efcd5c6f9766fa4b81aef3"
+checksum = "bc633605454125dec4b66843673f01c7df2b89479b32e0ed634e43a91cff62a5"
 dependencies = [
  "autocfg",
  "hashbrown",
@@ -620,19 +621,6 @@ name = "itm-decode"
 version = "0.4.0-alpha.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b2ce7e46f122ad8793b76d463973569e82b18479d28515f48df9adfbcb5d44e"
-dependencies = [
- "anyhow",
- "bitmatch",
- "bitvec",
- "cortex-m 0.6.7",
- "serde",
- "structopt",
-]
-
-[[package]]
-name = "itm-decode"
-version = "0.4.0"
-source = "git+https://github.com/rtic-scope/itm-decode.git#8dba46bc12d024656a6990a8c4f10efd2558645b"
 dependencies = [
  "anyhow",
  "bitmatch",
@@ -1119,12 +1107,13 @@ checksum = "cabe4fa914dec5870285fa7f71f602645da47c486e68486d2b4ceb4a343e90ac"
 
 [[package]]
 name = "rtic-scope-api"
-version = "0.1.0"
-source = "git+https://github.com/rtic-scope/api.git#e96de4f4b8e06fbfc3215d9c9552c39002228157"
+version = "0.1.0-alpha.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc7c0c59237e98506e244360ed99c7b31ebcdd48a568c9041cdf80d0ba0b805a"
 dependencies = [
  "anyhow",
  "chrono",
- "itm-decode 0.4.0",
+ "itm-decode",
  "serde",
 ]
 
@@ -1357,9 +1346,9 @@ dependencies = [
 
 [[package]]
 name = "sysinfo"
-version = "0.18.2"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d404aefa651a24a7f2a1190fec9fb6380ba84ac511a6fefad79eb0e63d39a97d"
+checksum = "41c72bb3368a39bb153f226d8dd426ee33d54bc31f44037c078391b4a0b8dc04"
 dependencies = [
  "cfg-if 1.0.0",
  "core-foundation-sys",
@@ -1529,9 +1518,9 @@ checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
 
 [[package]]
 name = "vergen"
-version = "5.1.9"
+version = "5.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f989a8a6dca13ecebbd7b892b69069f4321d19999f1a7e15a308f05ef4f5dbcd"
+checksum = "1cadc93a5cf745b643d29e6ec4612acdcd8fe7e73995050fff3fa812ed6d0312"
 dependencies = [
  "anyhow",
  "cfg-if 1.0.0",
