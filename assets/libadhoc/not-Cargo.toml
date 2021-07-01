@@ -1,3 +1,6 @@
+# This file is not named Cargo.toml in-repo because of
+# <https://github.com/rust-lang/cargo/issues/9643>.
+
 [package]
 name = "adhoc"
 version = "0.1.0"

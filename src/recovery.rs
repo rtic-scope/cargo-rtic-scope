@@ -382,6 +382,11 @@ impl<'a> TaskResolver<'a> {
         include_dir!("assets/libadhoc")
             .extract(&target_dir)
             .context("Failed to extract libadhoc")?;
+        // NOTE See <https://github.com/rust-lang/cargo/issues/9643>
+        fs::rename(
+            target_dir.join("not-Cargo.toml"),
+            target_dir.join("Cargo.toml"),
+        )?;
         // Add required crate (and optional feature) as dependency
         {
             let mut manifest = fs::OpenOptions::new()
