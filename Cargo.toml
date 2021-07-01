@@ -3,7 +3,6 @@ name = "cargo-rtic-scope"
 version = "0.1.0-alpha.0"
 authors = ["Viktor Sonesten <v@tmplt.dev>"]
 edition = "2018"
-build = "build.rs"
 license = "MIT OR Apache-2.0"
 homepage = "https://rtic-scope.github.io"
 repository = "https://github.com/rtic-scope/cargo-rtic-scope"
@@ -48,7 +47,3 @@ features = ["serde"]
 [dependencies.itm-decode]
 version = "0.4.0-alpha"
 features = ["serde"]
-
-[build-dependencies]
-vergen = "5"
-anyhow = "1"

@@ -15,7 +15,6 @@ mod sinks;
 mod sources;
 
 #[derive(Debug, StructOpt)]
-#[structopt(version = env!("VERGEN_GIT_SEMVER"))]
 struct Opts {
     /// The frontend to forward recorded/replayed trace to.
     #[structopt(long = "frontend", short = "-F", default_value = "dummy")]
