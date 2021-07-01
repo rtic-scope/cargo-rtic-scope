@@ -15,6 +15,8 @@ When done, `cargo-rtic-scope` will also stream the resolved trace to a
 frontend. For example, a graphical web application.
 
 ## License
-The code in this repository is distributed under the terms of both the MIT license and the Apache License (Version 2.0).
-
+For non-commercial purposes, the code in this repository is distributed under the terms of both the MIT license and the Apache License (Version 2.0).
 See [LICENSE-APACHE](LICENSE-APACHE) and [LICENSE-MIT](LICENSE-MIT) for details.
+
+This project is maintained in cooperation with @GrepitAB and Luleå Technical University.
+For commercial support and alternative licensing, inquire via <contact@grepit.se>.
