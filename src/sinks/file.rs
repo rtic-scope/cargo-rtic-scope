@@ -1,6 +1,7 @@
 use crate::recovery::{Metadata, TaskResolveMaps};
-
+use crate::sinks::Sink;
 use std::fs;
+
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -12,11 +13,6 @@ use itm_decode::TimestampedTracePackets;
 use serde_json;
 
 const TRACE_FILE_EXT: &'static str = ".trace";
-
-pub trait Sink {
-    fn drain(&mut self, packets: TimestampedTracePackets) -> Result<()>;
-    fn describe(&self) -> String;
-}
 
 pub struct FileSink {
     file: fs::File,
@@ -100,37 +96,20 @@ impl Sink for FileSink {
     }
 }
 
-pub struct FrontendSink {
-    socket: std::os::unix::net::UnixStream,
-    metadata: Metadata,
-}
+/// Attempts to find a git repository starting from the given path
+/// and walking upwards until / is hit.
+fn find_git_repo(mut path: PathBuf) -> Result<Repository> {
+    loop {
+        match Repository::open(&path) {
+            Ok(repo) => return Ok(repo),
+            Err(_) => {
+                if path.pop() {
+                    continue;
+                }
 
-impl FrontendSink {
-    pub fn new(socket: std::os::unix::net::UnixStream, metadata: Metadata) -> Self {
-        Self { socket, metadata }
-    }
-}
-
-impl Sink for FrontendSink {
-    fn drain(&mut self, packets: TimestampedTracePackets) -> Result<()> {
-        match self.metadata.resolve_event_chunk(packets.clone()) {
-            Ok(packets) => {
-                let json = serde_json::to_string(&packets)?;
-                self.socket.write_all(json.as_bytes())
-            }
-            .context("Failed to forward api::EventChunk to frontend"),
-            Err(e) => {
-                eprintln!(
-                    "Failed to resolve chunk from {:?}. Reason: {}. Ignoring...",
-                    packets, e
-                );
-                Ok(())
+                bail!("Failed to find git repo root");
             }
         }
-    }
-
-    fn describe(&self) -> String {
-        format!("frontend using socket {:?}", self.socket)
     }
 }
 
@@ -154,21 +133,4 @@ pub fn find_trace_files(path: PathBuf) -> Result<impl Iterator<Item = PathBuf>> 
                 None
             }
         }))
-}
-
-/// Attempts to find a git repository starting from the given path
-/// and walking upwards until / is hit.
-fn find_git_repo(mut path: PathBuf) -> Result<Repository> {
-    loop {
-        match Repository::open(&path) {
-            Ok(repo) => return Ok(repo),
-            Err(_) => {
-                if path.pop() {
-                    continue;
-                }
-
-                bail!("Failed to find git repo root");
-            }
-        }
-    }
 }

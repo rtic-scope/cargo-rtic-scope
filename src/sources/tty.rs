@@ -1,8 +1,9 @@
-//! Module for everything related to serial I/O.
 use std::fs;
+use std::io::Read;
 use std::os::unix::io::AsRawFd;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
+use itm_decode::{Decoder, DecoderState, TimestampedTracePackets};
 use nix::{
     fcntl::{self, FcntlArg, OFlag},
     libc,
@@ -154,4 +155,50 @@ pub fn configure(device: &String) -> Result<fs::File> {
     }
 
     Ok(file)
+}
+
+pub struct TTYSource {
+    bytes: std::io::Bytes<fs::File>,
+    decoder: Decoder,
+}
+
+impl TTYSource {
+    pub fn new(device: fs::File) -> Self {
+        Self {
+            bytes: device.bytes(),
+            decoder: Decoder::new(),
+        }
+    }
+}
+
+impl Iterator for TTYSource {
+    type Item = Result<TimestampedTracePackets>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(b) = self.bytes.next() {
+            match b {
+                Ok(b) => self.decoder.push([b].to_vec()),
+                Err(e) => {
+                    return Some(Err(anyhow!(
+                        "Failed to read byte from serial device: {:?}",
+                        e
+                    )))
+                }
+            };
+
+            match self.decoder.pull_with_timestamp() {
+                Ok(None) => continue,
+                Ok(Some(packets)) => return Some(Ok(packets)),
+                Err(e) => {
+                    self.decoder.state = DecoderState::Header;
+                    return Some(Err(anyhow!(
+                        "Failed to decode packets from serial: {:?}",
+                        e
+                    )));
+                }
+            }
+        }
+
+        None
+    }
 }

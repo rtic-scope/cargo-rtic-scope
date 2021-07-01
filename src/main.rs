@@ -14,7 +14,6 @@ use structopt::StructOpt;
 
 mod build;
 mod recovery;
-mod serial;
 mod sinks;
 mod sources;
 
@@ -247,8 +246,8 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
         .attach("stm32f401re")
         .context("Failed to attach to stm32f401re")?;
 
-    let mut trace_tty = sources::TtySource::new(
-        serial::configure(&opts.serial)
+    let mut trace_tty = sources::TTYSource::new(
+        sources::tty::configure(&opts.serial)
             .with_context(|| format!("Failed to configure {}", opts.serial))?,
     );
 
@@ -317,7 +316,7 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
 }
 
 fn replay(opts: &ReplayOpts) -> Result<Option<TraceTuple>> {
-    let mut traces = sinks::find_trace_files({
+    let mut traces = sinks::file::find_trace_files({
         if let Some(ref dir) = opts.trace_dir {
             dir.to_path_buf()
         } else {
