@@ -3,8 +3,12 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use probe_rs::{flashing, Probe};
 use structopt::StructOpt;
 
@@ -89,6 +93,14 @@ fn main() -> Result<()> {
         env::args().skip(1),
     );
 
+    // Setup SIGINT handler
+    let halt = Arc::new(AtomicBool::new(false));
+    let h = halt.clone();
+    ctrlc::set_handler(move || {
+        h.store(true, Ordering::SeqCst);
+    })
+    .context("Failed to install SIGINT handler")?;
+
     // Configure source and sinks. Recover the information we need to
     // map IRQ numbers to RTIC tasks.
     let (source, mut sinks, metadata) = match opts.cmd {
@@ -145,7 +157,12 @@ fn main() -> Result<()> {
     // Keep tabs on which sinks have broken during drain, if any.
     let mut sinks: Vec<(Box<dyn sinks::Sink>, bool)> =
         sinks.drain(..).map(|s| (s, false)).collect();
+    let mut drain_status = Ok(());
     for packets in source.into_iter() {
+        if halt.load(Ordering::SeqCst) {
+            break;
+        }
+
         let packets = packets.context("Failed to read trace packets from source")?;
 
         for (sink, is_broken) in sinks.iter_mut() {
@@ -164,30 +181,30 @@ fn main() -> Result<()> {
         // TODO replace weth Vec::drain_filter when stable.
         sinks.retain(|(_, is_broken)| !is_broken);
         if sinks.is_empty() {
+            drain_status = Err(anyhow!("All sinks broken. Cannot continue."));
             break;
         }
     }
 
-    // close socket to frontend
-    let sinks_broken = sinks.is_empty();
+    // close frontend sockets
     drop(sinks);
-
-    // TODO make sure the below is executed on SIGINT
 
     // Wait for frontend to proccess all packets and echo its stderr
     {
         let status = child.wait();
         for err in BufReader::new(stderr).lines() {
-            eprintln!("{}: {}", opts.frontend, err?);
+            eprintln!(
+                "{}: {}",
+                opts.frontend,
+                err.context("Failed to read frontend stderr")?
+            );
         }
-        status.with_context(|| format!("Frontend {} exited with error", opts.frontend))?;
+        if let Err(err) = status {
+            eprintln!("Frontend {} exited with error: {}", opts.frontend, err);
+        }
     }
 
-    if sinks_broken {
-        bail!("All sinks broken. Cannot continue.");
-    }
-
-    Ok(())
+    drain_status
 }
 
 // TODO Rethink this
