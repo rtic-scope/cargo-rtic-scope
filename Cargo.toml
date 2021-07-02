@@ -18,6 +18,7 @@ syn = "1"
 proc-macro2 = "1"
 quote = "1"
 probe-rs = "0.10"
+probe-rs-cli-util = "0.11"
 nix = "0.21.0"
 include_dir = "0.6.1"
 libloading = "0.7"
@@ -48,3 +49,6 @@ features = ["serde"]
 [dependencies.itm-decode]
 version = "0.4.0-alpha"
 features = ["serde"]
+
+[patch.crates-io]
+probe-rs = { git = "https://github.com/rtic-scope/probe-rs.git", branch = "fix/as-dep" }

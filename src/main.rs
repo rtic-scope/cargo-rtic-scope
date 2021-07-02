@@ -9,8 +9,16 @@ use std::sync::{
 };
 
 use anyhow::{anyhow, bail, Context, Result};
-use probe_rs::{flashing, Probe};
 use structopt::StructOpt;
+use probe_rs::{
+    config::{RegistryError, TargetSelector},
+    flashing::{
+        self,
+        DownloadOptions, FileDownloadError, FlashError, FlashProgress, ProgressEvent,
+    },
+    DebugProbeError, DebugProbeSelector, Probe, Session, Target, WireProtocol,
+};
+use probe_rs_cli_util::log;
 
 mod build;
 mod recovery;
@@ -27,14 +35,16 @@ struct Opts {
     cmd: Command,
 }
 
+#[derive(StructOpt, Debug)]
+enum Command {
+    Trace(TraceOpts),
+    Replay(ReplayOpts),
+}
+
 /// Execute and trace a chosen application on a target device and record
 /// the trace stream to file.
 #[derive(StructOpt, Debug)]
 struct TraceOpts {
-    /// Binary to flash and trace.
-    #[structopt(long = "bin")]
-    bin: String,
-
     // TODO handle --example
     /// Serial device over which trace stream is expected.
     #[structopt(long = "serial")]
@@ -58,6 +68,171 @@ struct TraceOpts {
     /// Optional override of the trace clock frequency.
     #[structopt(long = "freq")]
     trace_clk_freq: Option<u32>,
+
+    #[structopt(flatten)]
+    flash_options: FlashOpts,
+}
+
+#[derive(Debug, StructOpt)]
+// #[structopt(bin_name = "cargo flash", after_help = CARGO_HELP_MESSAGE)]
+struct FlashOpts {
+    // #[structopt(short = "V", long = "version")]
+    // pub version: bool,
+    #[structopt(name = "chip", long = "chip")]
+    chip: Option<String>,
+    #[structopt(name = "chip description file path", long = "chip-description-path")]
+    chip_description_path: Option<String>,
+    #[structopt(name = "list-chips", long = "list-chips")]
+    list_chips: bool,
+    #[structopt(
+        name = "list-probes",
+        long = "list-probes",
+        help = "Lists all the connected probes that can be seen.\n\
+        If udev rules or permissions are wrong, some probes might not be listed."
+    )]
+    list_probes: bool,
+    #[structopt(name = "disable-progressbars", long = "disable-progressbars")]
+    disable_progressbars: bool,
+    #[structopt(name = "protocol", long = "protocol", default_value = "swd")]
+    protocol: WireProtocol,
+    #[structopt(
+        long = "probe",
+        help = "Use this flag to select a specific probe in the list.\n\
+        Use '--probe VID:PID' or '--probe VID:PID:Serial' if you have more than one probe with the same VID:PID."
+    )]
+    probe_selector: Option<DebugProbeSelector>,
+    #[structopt(
+        long = "connect-under-reset",
+        help = "Use this flag to assert the nreset & ntrst pins during attaching the probe to the chip."
+    )]
+    connect_under_reset: bool,
+    #[structopt(
+        name = "reset-halt",
+        long = "reset-halt",
+        help = "Use this flag to reset and halt (instead of just a reset) the attached core after flashing the target."
+    )]
+    reset_halt: bool,
+    #[structopt(
+        name = "level",
+        long = "log",
+        help = "Use this flag to set the log level.\n\
+        Default is `warning`. Possible choices are [error, warning, info, debug, trace]."
+    )]
+    log: Option<log::Level>,
+    #[structopt(name = "speed", long = "speed", help = "The protocol speed in kHz.")]
+    speed: Option<u32>,
+    #[structopt(
+        name = "restore-unwritten",
+        long = "restore-unwritten",
+        help = "Enable this flag to restore all bytes erased in the sector erase but not overwritten by any page."
+    )]
+    restore_unwritten: bool,
+    #[structopt(
+        name = "filename",
+        long = "flash-layout",
+        help = "Requests the flash builder to output the layout into the given file in SVG format."
+    )]
+    flash_layout_output_path: Option<String>,
+    #[structopt(
+        name = "elf file",
+        long = "elf",
+        help = "The path to the ELF file to be flashed."
+    )]
+    elf: Option<String>,
+    #[structopt(
+        name = "directory",
+        long = "work-dir",
+        help = "The work directory from which cargo-flash should operate from."
+    )]
+    work_dir: Option<String>,
+
+    #[structopt(long = "dry-run")]
+    dry_run: bool,
+
+    #[structopt(flatten)]
+    /// Arguments which are forwarded to 'cargo build'.
+    cargo_options: CargoOptions,
+}
+
+impl FlashOpts {
+    pub fn as_options(&self) -> Vec<String> {
+        let mut opts = vec![];
+
+        if let Some(chip) = &self.chip {
+            opts.push("--chip".into());
+            opts.push(format!("{}", chip));
+        }
+        if let Some(path) = &self.chip_description_path {
+            opts.push(format!("--chip-description-path {}", path));
+        }
+        if self.list_chips {
+            opts.push("--list-chips".into());
+        }
+        if self.list_probes {
+            opts.push("--list-probes".into());
+        }
+        if self.disable_progressbars {
+            opts.push("--disable-progressbars".into());
+        }
+        opts.push("--protocol".into());
+        opts.push(format!("{:?}", self.protocol));
+        if let Some(probe) = &self.probe_selector {
+            opts.push(format!("--probe {}", if let Some(serial) = &probe.serial_number {
+                format!("{}:{}:{}", probe.vendor_id, probe.product_id, serial)
+            } else {
+                format!("{}:{}", probe.vendor_id, probe.product_id)
+            }));
+        }
+        if self.connect_under_reset {
+            opts.push("--connect-under-reset".into());
+        }
+        if self.reset_halt {
+            opts.push("--reset-halt".into());
+        }
+        if let Some(level) = &self.log {
+            opts.push(format!("--log {:?}", level));
+        }
+        if let Some(speed) = &self.speed {
+            opts.push(format!("--speed {}", speed));
+        }
+        if self.restore_unwritten {
+            opts.push("--restore-unwritten".into());
+        }
+        if let Some(file_name) = &self.flash_layout_output_path {
+            todo!();
+        }
+
+        // TODO fill in remainer
+
+        opts
+    }
+}
+
+#[derive(StructOpt, Debug)]
+struct CargoOptions {
+    #[structopt(name = "binary", long = "bin", hidden = true)]
+    bin: Option<String>,
+    #[structopt(name = "example", long = "example", hidden = true)]
+    example: Option<String>,
+    #[structopt(name = "package", short = "p", long = "package", hidden = true)]
+    package: Option<String>,
+    #[structopt(name = "release", long = "release", hidden = true)]
+    release: bool,
+    #[structopt(name = "target", long = "target", hidden = true)]
+    target: Option<String>,
+    #[structopt(
+        name = "PATH",
+        long = "manifest-path",
+        parse(from_os_str),
+        hidden = true
+    )]
+    manifest_path: Option<PathBuf>,
+    #[structopt(long, hidden = true)]
+    no_default_features: bool,
+    #[structopt(long, hidden = true)]
+    all_features: bool,
+    #[structopt(long, hidden = true)]
+    features: Vec<String>,
 }
 
 /// Replay a previously recorded trace stream for post-mortem analysis.
@@ -78,12 +253,6 @@ struct ReplayOpts {
     /// the build cache of <bin> is used (usually ./target/).
     #[structopt(name = "trace-dir", long = "trace-dir", parse(from_os_str))]
     trace_dir: Option<PathBuf>,
-}
-
-#[derive(StructOpt, Debug)]
-enum Command {
-    Trace(TraceOpts),
-    Replay(ReplayOpts),
 }
 
 fn main() -> Result<()> {
@@ -233,25 +402,12 @@ type TraceTuple = (
 );
 
 fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
-    // Attach to target and prepare serial. We want to fail fast on any
-    // I/O issues.
-    //
-    // TODO allow user to specify probe and target
-    let probes = Probe::list_all();
-    if probes.is_empty() {
-        bail!("No supported target probes found");
-    }
-    let probe = probes[0].open().context("Unable to open first probe")?;
-    let mut session = probe
-        .attach("stm32f401re")
-        .context("Failed to attach to stm32f401re")?;
-
     let mut trace_tty = sources::TTYSource::new(
         sources::tty::configure(&opts.serial)
             .with_context(|| format!("Failed to configure {}", opts.serial))?,
     );
 
-    let (cargo, artifact) = build_target_binary(&opts.bin, vec![])?;
+    let (cargo, artifact) = build_target_binary(&opts.flash_options.cargo_options.bin.as_ref().unwrap(), vec![])?;
 
     // TODO make this into Sink::generate().remove_old(), etc.
     let mut trace_sink = sinks::FileSink::generate_trace_file(
@@ -269,21 +425,25 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
         .resolve()
         .context("Failed to resolve tasks")?;
 
-    // Flash binary to target
-    //
-    // TODO use a progress bar alike cargo-flash
-    //
-    // TODO skip flash if correct bin already flashed. We check that by
-    // downloding the binary and comparing hashes (unless there is HW
-    // that does this for us)
-    eprintln!("Flashing {}...", opts.bin);
-    flashing::download_file(
-        &mut session,
-        &artifact.executable.unwrap(),
-        flashing::Format::Elf,
-    )
-    .context("Failed to flash target firmware")?;
-    eprintln!("Flashed.");
+    // Flash artifact to target with cargo-flash
+    {
+        let mut cargo_flash = std::process::Command::new("cargo");
+        cargo_flash.arg("flash")
+            .args(opts.flash_options.as_options())
+            .args(&["--elf", &artifact.executable.unwrap().to_str().unwrap()]);
+        let mut child = cargo_flash.spawn().context("Failed to execute cargo-flash. Is it installed?")?;
+        child.wait().context("cargo-flash exited non-zero")?;
+    }
+
+    // Re-establish probe connection
+    let probes = Probe::list_all();
+    if probes.is_empty() {
+        bail!("No supported target probes found");
+    }
+    let probe = probes[0].open().context("Unable to open first probe")?;
+    let mut session = probe
+        .attach("stm32f401re")
+        .context("Failed to attach to stm32f401re")?;
 
     // Sample the timestamp of target reset, wait for trace clock
     // frequency payload, flush metadata to file.
