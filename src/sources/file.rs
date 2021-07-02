@@ -1,4 +1,5 @@
 use crate::recovery::Metadata;
+use crate::sources::Source;
 
 use std::fs;
 use std::io::BufReader;
@@ -45,5 +46,12 @@ impl Iterator for FileSource {
             Some(e) => Some(e.context("Failed to deserialize packet from trace file")),
             None => None,
         }
+    }
+}
+
+impl Source for FileSource {
+    fn reset_target(&mut self) -> Result<()> {
+        // not connected to a target
+        Ok(())
     }
 }

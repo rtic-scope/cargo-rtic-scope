@@ -3,14 +3,18 @@ use std::convert::TryInto;
 use anyhow::{bail, Context, Result};
 use itm_decode::{TimestampedTracePackets, TracePacket};
 
-// TODO Use when trait aliases are stabilized <https://github.com/rust-lang/rust/issues/41517>
-// trait Source: Iterator<Item = Result<TimestampedTracePackets>>;
+pub trait Source: Iterator<Item = Result<TimestampedTracePackets>> {
+    fn reset_target(&mut self) -> Result<()>;
+}
 
 mod file;
 pub use file::FileSource;
 
 pub mod tty;
 pub use tty::TTYSource;
+
+mod cmsis_dap;
+pub use cmsis_dap::DAPSource;
 
 pub fn wait_for_trace_clk_freq(
     mut source: impl Iterator<Item = Result<TimestampedTracePackets>>,

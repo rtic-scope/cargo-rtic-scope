@@ -36,9 +36,10 @@ struct TraceOpts {
     bin: String,
 
     // TODO handle --example
-    /// Serial device over which trace stream is expected.
+    /// Optional serial device over which trace stream is expected,
+    /// instead of a CMSIS-DAP device.
     #[structopt(long = "serial")]
-    serial: String,
+    serial: Option<String>,
 
     /// Output directory for recorded trace streams. By default, the
     /// build chache of <bin> is used (usually ./target/).
@@ -227,7 +228,7 @@ fn build_target_binary(
 }
 
 type TraceTuple = (
-    Box<dyn Iterator<Item = Result<itm_decode::TimestampedTracePackets>>>,
+    Box<dyn sources::Source>,
     Vec<Box<dyn sinks::Sink>>,
     recovery::Metadata,
 );
@@ -245,11 +246,6 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
     let mut session = probe
         .attach("stm32f401re")
         .context("Failed to attach to stm32f401re")?;
-
-    let mut trace_tty = sources::TTYSource::new(
-        sources::tty::configure(&opts.serial)
-            .with_context(|| format!("Failed to configure {}", opts.serial))?,
-    );
 
     let (cargo, artifact) = build_target_binary(&opts.bin, vec![])?;
 
@@ -285,14 +281,25 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
     .context("Failed to flash target firmware")?;
     eprintln!("Flashed.");
 
+    let mut trace_source: Box<dyn sources::Source> = if let Some(dev) = &opts.serial {
+        Box::new(sources::TTYSource::new(
+            sources::tty::configure(&dev)
+                .with_context(|| format!("Failed to configure {}", dev))?,
+            session,
+        ))
+    } else {
+        Box::new(sources::DAPSource::new(session)?)
+    };
+
     // Sample the timestamp of target reset, wait for trace clock
     // frequency payload, flush metadata to file.
     let metadata = trace_sink
         .init(maps, opts.trace_clk_freq, || {
             // Reset the target to  execute flashed binary
             eprintln!("Resetting target...");
-            let mut core = session.core(0)?;
-            core.reset().context("Unable to reset target")?;
+            // let mut core = session.core(0)?;
+            // core.reset().context("Unable to reset target")?;
+            trace_source.reset_target()?;
             eprintln!("Reset.");
 
             // Wait for a non-zero trace clock frequency payload.
@@ -301,18 +308,19 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
             // packets that are emitted during target initialization. In
             // local tests these packets have been but noise, so this is
             // okay for the moment.
-            let freq = sources::wait_for_trace_clk_freq(&mut trace_tty)
-                .context("Failed to read trace clock frequency from source")?;
+            let freq = if opts.serial.is_some() {
+                sources::wait_for_trace_clk_freq(&mut trace_source)
+                    .context("Failed to read trace clock frequency from source")?
+            } else {
+                // TODO get this value from probe-rs
+                16_000_000
+            };
 
             Ok(freq)
         })
         .context("Failed to initialize metadata")?;
 
-    Ok(Some((
-        Box::new(trace_tty),
-        vec![Box::new(trace_sink)],
-        metadata,
-    )))
+    Ok(Some((trace_source, vec![Box::new(trace_sink)], metadata)))
 }
 
 fn replay(opts: &ReplayOpts) -> Result<Option<TraceTuple>> {

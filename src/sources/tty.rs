@@ -1,3 +1,5 @@
+use crate::sources::Source;
+
 use std::fs;
 use std::io::Read;
 use std::os::unix::io::AsRawFd;
@@ -12,6 +14,7 @@ use nix::{
         SpecialCharacterIndices as CC,
     },
 };
+use probe_rs::Session;
 
 mod ioctl {
     use super::libc;
@@ -160,13 +163,15 @@ pub fn configure(device: &String) -> Result<fs::File> {
 pub struct TTYSource {
     bytes: std::io::Bytes<fs::File>,
     decoder: Decoder,
+    session: Session,
 }
 
 impl TTYSource {
-    pub fn new(device: fs::File) -> Self {
+    pub fn new(device: fs::File, session: Session) -> Self {
         Self {
             bytes: device.bytes(),
             decoder: Decoder::new(),
+            session,
         }
     }
 }
@@ -200,5 +205,14 @@ impl Iterator for TTYSource {
         }
 
         None
+    }
+}
+
+impl Source for TTYSource {
+    fn reset_target(&mut self) -> Result<()> {
+        let mut core = self.session.core(0)?;
+        core.reset().context("Unable to reset target")?;
+
+        Ok(())
     }
 }
