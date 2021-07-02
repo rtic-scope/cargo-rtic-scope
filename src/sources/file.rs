@@ -1,5 +1,5 @@
 use crate::recovery::Metadata;
-use crate::sources::Source;
+use crate::sources::{Source, BufferStatus};
 
 use std::fs;
 use std::io::BufReader;
@@ -53,5 +53,9 @@ impl Source for FileSource {
     fn reset_target(&mut self) -> Result<()> {
         // not connected to a target
         Ok(())
+    }
+
+    fn avail_buffer(&self) -> BufferStatus {
+        BufferStatus::NotApplicable
     }
 }

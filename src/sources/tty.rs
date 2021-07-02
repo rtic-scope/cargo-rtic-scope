@@ -1,8 +1,8 @@
-use crate::sources::Source;
+use crate::sources::{BufferStatus, Source};
 
 use std::fs;
 use std::io::Read;
-use std::os::unix::io::AsRawFd;
+use std::os::unix::io::{AsRawFd, RawFd};
 
 use anyhow::{anyhow, Context, Result};
 use itm_decode::{Decoder, DecoderState, TimestampedTracePackets};
@@ -13,6 +13,7 @@ use nix::{
         self, BaudRate, ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg,
         SpecialCharacterIndices as CC,
     },
+    unistd::{sysconf, SysconfVar},
 };
 use probe_rs::Session;
 
@@ -22,6 +23,7 @@ mod ioctl {
 
     ioctl_none_bad!(tiocexcl, libc::TIOCEXCL);
     ioctl_read_bad!(tiocmget, libc::TIOCMGET, libc::c_int);
+    ioctl_read_bad!(fionread, libc::FIONREAD, libc::c_int);
     ioctl_write_ptr_bad!(tiocmset, libc::TIOCMSET, libc::c_int);
     ioctl_write_int_bad!(tcflsh, libc::TCFLSH);
 }
@@ -162,6 +164,7 @@ pub fn configure(device: &String) -> Result<fs::File> {
 
 pub struct TTYSource {
     bytes: std::io::Bytes<fs::File>,
+    fd: RawFd,
     decoder: Decoder,
     session: Session,
 }
@@ -169,6 +172,7 @@ pub struct TTYSource {
 impl TTYSource {
     pub fn new(device: fs::File, session: Session) -> Self {
         Self {
+            fd: device.as_raw_fd(),
             bytes: device.bytes(),
             decoder: Decoder::new(),
             session,
@@ -214,5 +218,25 @@ impl Source for TTYSource {
         core.reset().context("Unable to reset target")?;
 
         Ok(())
+    }
+
+    fn avail_buffer(&self) -> BufferStatus {
+        let avail_bytes = unsafe {
+            let mut fionread: libc::c_int = 0;
+            if let Err(_) = ioctl::fionread(self.fd, &mut fionread) {
+                return BufferStatus::Unknown;
+            } else {
+                fionread as i64
+            }
+        };
+
+        if let Ok(Some(page_size)) = sysconf(SysconfVar::PAGE_SIZE) {
+            match page_size - avail_bytes {
+                n if n < page_size / 4 => BufferStatus::AvailWarn(n, page_size),
+                n => BufferStatus::Avail(n),
+            }
+        } else {
+            BufferStatus::Unknown
+        }
     }
 }

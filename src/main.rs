@@ -103,7 +103,7 @@ fn main() -> Result<()> {
 
     // Configure source and sinks. Recover the information we need to
     // map IRQ numbers to RTIC tasks.
-    let (source, mut sinks, metadata) = match opts.cmd {
+    let (mut source, mut sinks, metadata) = match opts.cmd {
         Command::Trace(ref opts) => trace(opts).context("Failed to capture trace")?.unwrap(), // NOTE(unwrap): trace always returns Some
         Command::Replay(ref opts) => {
             match replay(opts).with_context(|| {
@@ -151,6 +151,10 @@ fn main() -> Result<()> {
         .take()
         .context("Failed to pipe frontend stderr")?;
 
+    if let sources::BufferStatus::Unknown = source.avail_buffer() {
+        eprintln!("Buffer size of source could not be found. Buffer may overflow and corrupt trace stream without warning.");
+    }
+
     // All preparatory I/O and information recovery done. Forward all
     // trace packets to all sinks.
     //
@@ -158,9 +162,22 @@ fn main() -> Result<()> {
     let mut sinks: Vec<(Box<dyn sinks::Sink>, bool)> =
         sinks.drain(..).map(|s| (s, false)).collect();
     let mut drain_status = Ok(());
-    for packets in source.into_iter() {
+    let mut buffer_warning = false;
+    while let Some(packets) = source.next() {
         if halt.load(Ordering::SeqCst) {
             break;
+        }
+
+        // Eventually warn about the source input buffer overflowing,
+        // but only once.
+        if !buffer_warning {
+            if let sources::BufferStatus::AvailWarn(avail, buf_sz) = source.avail_buffer() {
+                eprintln!(
+                "Source buffer is almost full ({}/{} bytes free) and it not read quickly enough",
+                avail, buf_sz
+                );
+                buffer_warning = true;
+            }
         }
 
         let packets = packets.context("Failed to read trace packets from source")?;
@@ -176,7 +193,7 @@ fn main() -> Result<()> {
             }
         }
 
-        // remove all broken sinks
+        // remove broken sinks, if any
         //
         // TODO replace weth Vec::drain_filter when stable.
         sinks.retain(|(_, is_broken)| !is_broken);
