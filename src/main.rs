@@ -10,7 +10,7 @@ use std::sync::{
 
 use anyhow::{anyhow, bail, Context, Result};
 use probe_rs::flashing;
-use probe_rs_cli_util::flash::{CargoOptions, FlashOptions};
+use probe_rs_cli_util::flash::{list_connected_probes, print_families, CargoOptions, FlashOptions};
 use structopt::StructOpt;
 
 mod build;
@@ -101,7 +101,10 @@ fn main() -> Result<()> {
     // Configure source and sinks. Recover the information we need to
     // map IRQ numbers to RTIC tasks.
     let (mut source, mut sinks, metadata) = match opts.cmd {
-        Command::Trace(ref opts) => trace(opts).context("Failed to capture trace")?.unwrap(), // NOTE(unwrap): trace always returns Some
+        Command::Trace(ref opts) => match trace(opts)? {
+            Some(tup) => tup,
+            None => return Ok(()), // NOTE --list-{chips,probes} passed
+        },
         Command::Replay(ref opts) => {
             match replay(opts).with_context(|| {
                 format!("Failed to {}", {
@@ -269,6 +272,16 @@ type TraceTuple = (
 );
 
 fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
+    if opts.flash_options.list_probes {
+        list_connected_probes(std::io::stdout()).context("Failed to list connected probes")?;
+        return Ok(None);
+    }
+
+    if opts.flash_options.list_chips {
+        print_families(std::io::stdout()).context("Failed to list chip families")?;
+        return Ok(None);
+    }
+
     let (cargo, artifact) = build_target_binary(&opts.flash_options.cargo_options)
         .context("Failed to build target binary")?;
 
