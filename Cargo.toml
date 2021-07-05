@@ -1,6 +1,6 @@
 [package]
 name = "cargo-rtic-scope"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 authors = ["Viktor Sonesten <v@tmplt.dev>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -29,6 +29,10 @@ rtic-scope-api = "0.1.0-alpha"
 tempfile = "3"
 ctrlc = "3"
 
+[dependencies.probe-rs-cli-util]
+version = "0.11"
+default-features = false
+
 [dependencies.anyhow]
 version = "1"
 features = ["backtrace"]
@@ -51,3 +55,4 @@ features = ["serde"]
 
 [patch.crates-io]
 probe-rs = { git = "https://github.com/rtic-scope/probe-rs.git", branch = "fix/as-dep" }
+probe-rs-cli-util = { git = "https://github.com/rtic-scope/probe-rs.git", branch = "adhoc/rtic-scope" }

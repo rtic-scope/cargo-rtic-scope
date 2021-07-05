@@ -9,7 +9,8 @@ use std::sync::{
 };
 
 use anyhow::{anyhow, bail, Context, Result};
-use probe_rs::{flashing, Probe};
+use probe_rs::flashing;
+use probe_rs_cli_util::flash::{CargoOptions, FlashOptions};
 use structopt::StructOpt;
 
 mod build;
@@ -31,11 +32,6 @@ struct Opts {
 /// the trace stream to file.
 #[derive(StructOpt, Debug)]
 struct TraceOpts {
-    /// Binary to flash and trace.
-    #[structopt(long = "bin")]
-    bin: String,
-
-    // TODO handle --example
     /// Optional serial device over which trace stream is expected,
     /// instead of a CMSIS-DAP device.
     #[structopt(long = "serial")]
@@ -59,10 +55,13 @@ struct TraceOpts {
     /// Optional override of the trace clock frequency.
     #[structopt(long = "freq")]
     trace_clk_freq: Option<u32>,
+
+    #[structopt(flatten)]
+    flash_options: FlashOptions,
 }
 
 /// Replay a previously recorded trace stream for post-mortem analysis.
-#[derive(StructOpt, Debug, Clone)]
+#[derive(StructOpt, Debug)]
 struct ReplayOpts {
     #[structopt(name = "list", long = "list", short = "l")]
     list: bool,
@@ -70,15 +69,13 @@ struct ReplayOpts {
     #[structopt(required_unless("list"))]
     index: Option<usize>,
 
-    /// Target binary from which to resolve the build cache and thus
-    /// previously recorded trace streams.
-    #[structopt(long = "bin", required_unless("trace-dir"))]
-    bin: Option<String>,
-
     /// Directory where previously recorded trace streams. By default,
     /// the build cache of <bin> is used (usually ./target/).
     #[structopt(name = "trace-dir", long = "trace-dir", parse(from_os_str))]
     trace_dir: Option<PathBuf>,
+
+    #[structopt(flatten)]
+    cargo_options: CargoOptions,
 }
 
 #[derive(StructOpt, Debug)]
@@ -224,16 +221,37 @@ fn main() -> Result<()> {
     drain_status
 }
 
-// TODO Rethink this
-fn build_target_binary(
-    bin: &String,
-    cargo_flags: Vec<String>,
-) -> Result<(build::CargoWrapper, build::Artifact)> {
+fn build_target_binary(opts: &CargoOptions) -> Result<(build::CargoWrapper, build::Artifact)> {
     // Ensure we have a working cargo
-    let mut cargo = build::CargoWrapper::new(cargo_flags).context("Failed to setup cargo")?;
+    let mut cargo = build::CargoWrapper::new(vec![]).context("Failed to setup cargo")?;
 
     // Build the wanted binary
-    let artifact = cargo.build(&env::current_dir()?, format!("--bin {}", bin), "bin")?;
+    let artifact = cargo.build(
+        &env::current_dir()?,
+        match opts {
+            CargoOptions {
+                bin: Some(bin),
+                example: None,
+                ..
+            } => format!("--bin {}", bin),
+            CargoOptions {
+                bin: None,
+                example: Some(example),
+                ..
+            } => format!("--example {}", example),
+            CargoOptions {
+                bin: None,
+                example: None,
+                ..
+            } => bail!("Missing expected --bin or --example option"),
+            CargoOptions {
+                bin: Some(_),
+                example: Some(_),
+                ..
+            } => bail!("Ambiguity error: please specify only --bin or --example"),
+        },
+        "bin",
+    )?;
 
     // Internally resolve the build cache used when building the
     // artifact. It will henceforth be reused by all subsequent build
@@ -251,20 +269,13 @@ type TraceTuple = (
 );
 
 fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
-    // Attach to target and prepare serial. We want to fail fast on any
-    // I/O issues.
-    //
-    // TODO allow user to specify probe and target
-    let probes = Probe::list_all();
-    if probes.is_empty() {
-        bail!("No supported target probes found");
-    }
-    let probe = probes[0].open().context("Unable to open first probe")?;
-    let mut session = probe
-        .attach("stm32f401re")
-        .context("Failed to attach to stm32f401re")?;
+    let (cargo, artifact) = build_target_binary(&opts.flash_options.cargo_options)
+        .context("Failed to build target binary")?;
 
-    let (cargo, artifact) = build_target_binary(&opts.bin, vec![])?;
+    let mut session = opts
+        .flash_options
+        .target_session()
+        .context("Failed to attach to target session")?;
 
     // TODO make this into Sink::generate().remove_old(), etc.
     let mut trace_sink = sinks::FileSink::generate_trace_file(
@@ -289,13 +300,10 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
     // TODO skip flash if correct bin already flashed. We check that by
     // downloding the binary and comparing hashes (unless there is HW
     // that does this for us)
-    eprintln!("Flashing {}...", opts.bin);
-    flashing::download_file(
-        &mut session,
-        &artifact.executable.unwrap(),
-        flashing::Format::Elf,
-    )
-    .context("Failed to flash target firmware")?;
+    let elf = artifact.executable.unwrap();
+    eprintln!("Flashing {}...", elf.display());
+    flashing::download_file(&mut session, &elf, flashing::Format::Elf)
+        .context("Failed to flash target firmware")?;
     eprintln!("Flashed.");
 
     let mut trace_source: Box<dyn sources::Source> = if let Some(dev) = &opts.serial {
@@ -345,7 +353,7 @@ fn replay(opts: &ReplayOpts) -> Result<Option<TraceTuple>> {
         if let Some(ref dir) = opts.trace_dir {
             dir.to_path_buf()
         } else {
-            let (cargo, _artifact) = build_target_binary(opts.bin.as_ref().unwrap(), vec![])?;
+            let (cargo, _artifact) = build_target_binary(&opts.cargo_options)?;
             cargo.target_dir().unwrap().join("rtic-traces")
         }
     })?;
