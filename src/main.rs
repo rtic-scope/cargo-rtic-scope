@@ -173,7 +173,7 @@ fn main() -> Result<()> {
     // Keep tabs on which sinks have broken during drain, if any.
     let mut sinks: Vec<(Box<dyn sinks::Sink>, bool)> =
         sinks.drain(..).map(|s| (s, false)).collect();
-    let mut drain_status = Ok(());
+    let mut retstatus = Ok(());
     let mut buffer_warning = false;
     while let Some(packets) = source.next() {
         if halt.load(Ordering::SeqCst) {
@@ -192,7 +192,13 @@ fn main() -> Result<()> {
             }
         }
 
-        let packets = packets.context("Failed to read trace packets from source")?;
+        let packets = match packets {
+            Ok(packets) => packets,
+            Err(e) => {
+                retstatus = Err(e.context("Failed to read trace packets from source"));
+                break;
+            }
+        };
 
         for (sink, is_broken) in sinks.iter_mut() {
             if let Err(e) = sink.drain(packets.clone()) {
@@ -210,7 +216,7 @@ fn main() -> Result<()> {
         // TODO replace weth Vec::drain_filter when stable.
         sinks.retain(|(_, is_broken)| !is_broken);
         if sinks.is_empty() {
-            drain_status = Err(anyhow!("All sinks broken. Cannot continue."));
+            retstatus = Err(anyhow!("All sinks broken. Cannot continue."));
             break;
         }
     }
@@ -233,7 +239,7 @@ fn main() -> Result<()> {
         }
     }
 
-    drain_status
+    retstatus
 }
 
 fn build_target_binary(opts: &CargoOptions) -> Result<(build::CargoWrapper, build::Artifact)> {
