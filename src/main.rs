@@ -52,18 +52,24 @@ struct TraceOpts {
     #[structopt(long = "clear-traces")]
     remove_prev_traces: bool,
 
+    #[structopt(flatten)]
+    tpiu: TPIUOptions,
+
+    #[structopt(flatten)]
+    flash_options: FlashOptions,
+}
+
+#[derive(StructOpt, Debug)]
+pub struct TPIUOptions {
     /// Speed in Hz of the TPIU trace clock. Used to calculate
     /// timestamps of received timestamps. If not set, a DataTraceValue
     /// packet containing the frequency is expected in the trace stream.
     #[structopt(long = "tpiu-freq", required_unless("serial"))]
-    trace_clk_freq: Option<u32>,
+    clk_freq: Option<u32>,
 
     // Baud rate of the communication from the target TPIU.
-    #[structopt(long = "tpiu-baud", default_value = "115_200")]
-    tpiu_baud_rate: u32,
-
-    #[structopt(flatten)]
-    flash_options: FlashOptions,
+    #[structopt(long = "tpiu-baud", default_value = "115200")]
+    baud_rate: u32,
 }
 
 /// Replay a previously recorded trace stream for post-mortem analysis.
@@ -332,11 +338,7 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
             session,
         ))
     } else {
-        Box::new(sources::DAPSource::new(
-            session,
-            opts.trace_clk_freq.unwrap(),
-            opts.tpiu_baud_rate,
-        )?)
+        Box::new(sources::DAPSource::new(session, &opts.tpiu)?)
     };
 
     // Sample the timestamp of target reset, wait for trace clock
@@ -350,7 +352,7 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
             trace_source.reset_target()?;
             eprintln!("Reset.");
 
-            let freq = if let Some(freq) = opts.trace_clk_freq {
+            let freq = if let Some(freq) = opts.tpiu.clk_freq {
                 freq
             } else {
                 assert!(opts.serial.is_some());

@@ -1,4 +1,5 @@
 use crate::sources::Source;
+use crate::TPIUOptions;
 
 use anyhow::{anyhow, Context, Result};
 use itm_decode::{Decoder, DecoderState, TimestampedTracePackets};
@@ -10,10 +11,13 @@ pub struct DAPSource {
 }
 
 impl DAPSource {
-    pub fn new(mut session: Session, tpiu_freq: u32, baud_rate: u32) -> Result<Self> {
+    pub fn new(mut session: Session, opts: &TPIUOptions) -> Result<Self> {
         // Configure probe and target for tracing
-        let cfg = SwoConfig::new(tpiu_freq)
-            .set_baud(baud_rate)
+        //
+        // NOTE(unwrap) --tpiu-freq is a requirement to enter this
+        // function.
+        let cfg = SwoConfig::new(opts.clk_freq.unwrap())
+            .set_baud(opts.baud_rate)
             .set_continuous_formatting(false);
         session.setup_swv(0, &cfg)?;
 
