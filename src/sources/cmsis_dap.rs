@@ -10,12 +10,10 @@ pub struct DAPSource {
 }
 
 impl DAPSource {
-    pub fn new(mut session: Session) -> Result<Self> {
+    pub fn new(mut session: Session, tpiu_freq: u32) -> Result<Self> {
         // Configure probe and target for tracing
-        //
-        // TODO: make this configurable
-        let cfg = SwoConfig::new(16_000_000)
-            .set_baud(2_000_000)
+        let cfg = SwoConfig::new(tpiu_freq)
+            .set_baud(115_200) // TODO make configurable?
             .set_continuous_formatting(false);
         session.setup_swv(0, &cfg)?;
 

@@ -34,7 +34,7 @@ struct Opts {
 struct TraceOpts {
     /// Optional serial device over which trace stream is expected,
     /// instead of a CMSIS-DAP device.
-    #[structopt(long = "serial")]
+    #[structopt(name = "serial", long = "serial")]
     serial: Option<String>,
 
     /// Output directory for recorded trace streams. By default, the
@@ -55,7 +55,7 @@ struct TraceOpts {
     /// Speed in Hz of the TPIU trace clock. Used to calculate
     /// timestamps of received timestamps. If not set, a DataTraceValue
     /// packet containing the frequency is expected in the trace stream.
-    #[structopt(long = "tpiu-freq")]
+    #[structopt(long = "tpiu-freq", required_unless("serial"))]
     trace_clk_freq: Option<u32>,
 
     #[structopt(flatten)]
@@ -328,7 +328,7 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
             session,
         ))
     } else {
-        Box::new(sources::DAPSource::new(session)?)
+        Box::new(sources::DAPSource::new(session, opts.trace_clk_freq.unwrap())?)
     };
 
     // Sample the timestamp of target reset, wait for trace clock
@@ -345,6 +345,8 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
             let freq = if let Some(freq) = opts.trace_clk_freq {
                 freq
             } else {
+                assert!(opts.serial.is_some());
+
                 // Wait for a non-zero trace clock frequency payload.
                 //
                 // NOTE A side-effect here is that we effectively disregard all
