@@ -68,7 +68,7 @@ pub struct TPIUOptions {
     clk_freq: Option<u32>,
 
     // Baud rate of the communication from the target TPIU.
-    #[structopt(long = "tpiu-baud", default_value = "115200")]
+    #[structopt(long = "tpiu-baud", default_value = "2000000")]
     baud_rate: u32,
 }
 
