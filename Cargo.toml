@@ -54,5 +54,5 @@ version = "0.4.0-alpha"
 features = ["serde"]
 
 [patch.crates-io]
-probe-rs = { git = "https://github.com/rtic-scope/probe-rs.git", branch = "fix/as-dep" }
+probe-rs = { git = "https://github.com/rtic-scope/probe-rs.git", branch = "adhoc/rtic-scope" }
 probe-rs-cli-util = { git = "https://github.com/rtic-scope/probe-rs.git", branch = "adhoc/rtic-scope" }
