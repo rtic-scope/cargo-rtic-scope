@@ -58,6 +58,10 @@ struct TraceOpts {
     #[structopt(long = "tpiu-freq", required_unless("serial"))]
     trace_clk_freq: Option<u32>,
 
+    // Baud rate of the communication from the target TPIU.
+    #[structopt(long = "tpiu-baud", default_value = "115_200")]
+    tpiu_baud_rate: u32,
+
     #[structopt(flatten)]
     flash_options: FlashOptions,
 }
@@ -328,7 +332,11 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
             session,
         ))
     } else {
-        Box::new(sources::DAPSource::new(session, opts.trace_clk_freq.unwrap())?)
+        Box::new(sources::DAPSource::new(
+            session,
+            opts.trace_clk_freq.unwrap(),
+            opts.tpiu_baud_rate,
+        )?)
     };
 
     // Sample the timestamp of target reset, wait for trace clock
