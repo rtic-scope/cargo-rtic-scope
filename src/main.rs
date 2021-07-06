@@ -52,8 +52,10 @@ struct TraceOpts {
     #[structopt(long = "clear-traces")]
     remove_prev_traces: bool,
 
-    /// Optional override of the trace clock frequency.
-    #[structopt(long = "freq")]
+    /// Speed in Hz of the TPIU trace clock. Used to calculate
+    /// timestamps of received timestamps. If not set, a DataTraceValue
+    /// packet containing the frequency is expected in the trace stream.
+    #[structopt(long = "tpiu-freq")]
     trace_clk_freq: Option<u32>,
 
     #[structopt(flatten)]
@@ -332,7 +334,7 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
     // Sample the timestamp of target reset, wait for trace clock
     // frequency payload, flush metadata to file.
     let metadata = trace_sink
-        .init(maps, opts.trace_clk_freq, || {
+        .init(maps, || {
             // Reset the target to  execute flashed binary
             eprintln!("Resetting target...");
             // let mut core = session.core(0)?;
@@ -340,18 +342,17 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
             trace_source.reset_target()?;
             eprintln!("Reset.");
 
-            // Wait for a non-zero trace clock frequency payload.
-            //
-            // NOTE A side-effect here is that we effectively disregard all
-            // packets that are emitted during target initialization. In
-            // local tests these packets have been but noise, so this is
-            // okay for the moment.
-            let freq = if opts.serial.is_some() {
+            let freq = if let Some(freq) = opts.trace_clk_freq {
+                freq
+            } else {
+                // Wait for a non-zero trace clock frequency payload.
+                //
+                // NOTE A side-effect here is that we effectively disregard all
+                // packets that are emitted during target initialization. In
+                // local tests these packets have been but noise, so this is
+                // okay for the moment.
                 sources::wait_for_trace_clk_freq(&mut trace_source)
                     .context("Failed to read trace clock frequency from source")?
-            } else {
-                // TODO get this value from probe-rs
-                16_000_000
             };
 
             Ok(freq)

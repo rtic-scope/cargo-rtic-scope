@@ -60,7 +60,6 @@ impl FileSink {
     pub fn init<F>(
         &mut self,
         maps: TaskResolveMaps,
-        freq_override: Option<u32>,
         reset_fun: F,
     ) -> Result<Metadata>
     where
@@ -72,7 +71,7 @@ impl FileSink {
         // Create a trace file header with metadata (maps, reset
         // timestamp, trace clock frequency). Any bytes after this
         // sequence refers to trace packets.
-        let metadata = Metadata::new(maps, ts, freq_override.unwrap_or(freq));
+        let metadata = Metadata::new(maps, ts, freq);
         {
             let json = serde_json::to_string(&metadata)?;
             self.file.write_all(json.as_bytes())
