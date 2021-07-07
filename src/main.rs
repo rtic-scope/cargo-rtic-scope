@@ -344,7 +344,7 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
             session,
         ))
     } else {
-        Box::new(sources::DAPSource::new(session, &opts.tpiu)?)
+        Box::new(sources::ProbeSource::new(session, &opts.tpiu)?)
     };
 
     // Sample the timestamp of target reset, wait for trace clock

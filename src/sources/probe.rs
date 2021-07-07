@@ -5,12 +5,12 @@ use anyhow::{anyhow, Context, Result};
 use itm_decode::{Decoder, DecoderState, TimestampedTracePackets};
 use probe_rs::{architecture::arm::SwoConfig, Session};
 
-pub struct DAPSource {
+pub struct ProbeSource {
     session: Session,
     decoder: Decoder,
 }
 
-impl DAPSource {
+impl ProbeSource {
     pub fn new(mut session: Session, opts: &TPIUOptions) -> Result<Self> {
         // Configure probe and target for tracing
         //
@@ -21,6 +21,14 @@ impl DAPSource {
             .set_continuous_formatting(false);
         session.setup_swv(0, &cfg)?;
 
+        // Enable exception tracing
+        // {
+        //     let mut core = session.core(0)?;
+        //     let components = session.get_arm_components()?;
+        //     let mut dwt = Dwt::new(&mut core, find_component(components, PeripheralType::Dwt)?);
+        //     dwt.enable_exception_trace()?;
+        // }
+
         Ok(Self {
             session,
             decoder: Decoder::new(),
@@ -28,7 +36,7 @@ impl DAPSource {
     }
 }
 
-impl Iterator for DAPSource {
+impl Iterator for ProbeSource {
     type Item = Result<TimestampedTracePackets>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -41,7 +49,7 @@ impl Iterator for DAPSource {
                 Err(e) => {
                     self.decoder.state = DecoderState::Header;
                     return Some(Err(anyhow!(
-                        "Failed to decode packets from CMSIS-DAP device: {:?}",
+                        "Failed to decode packets from probe: {:?}",
                         e
                     )));
                 }
@@ -52,7 +60,7 @@ impl Iterator for DAPSource {
     }
 }
 
-impl Source for DAPSource {
+impl Source for ProbeSource {
     fn reset_target(&mut self) -> Result<()> {
         let mut core = self.session.core(0)?;
         core.reset().context("Unable to reset target")?;

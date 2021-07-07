@@ -32,8 +32,8 @@ pub use file::FileSource;
 pub mod tty;
 pub use tty::TTYSource;
 
-mod cmsis_dap;
-pub use cmsis_dap::DAPSource;
+mod probe;
+pub use probe::ProbeSource;
 
 pub fn wait_for_trace_clk_freq(
     mut source: impl Iterator<Item = Result<TimestampedTracePackets>>,
