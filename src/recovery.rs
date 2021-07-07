@@ -151,21 +151,21 @@ impl<'a> TaskResolver<'a> {
             .context("Failed to tokenize file")?
             .into_iter()
             .skip_while(|token| {
-                // TODO improve this
                 if let TokenTree::Group(g) = token {
-                    return g.stream().into_iter().nth(0).unwrap().to_string().as_str() != "app";
+                    if let Some(c) = g.stream().into_iter().nth(0) {
+                        return c.to_string().as_str() != "app";
+                    }
                 }
                 true
             });
         let app_args = {
             let mut args: Option<TokenStream> = None;
-            if let TokenTree::Group(g) = rtic_app.next().unwrap() {
-                // TODO improve this
-                if let TokenTree::Group(g) = g.stream().into_iter().nth(1).unwrap() {
+            if let Some(TokenTree::Group(g)) = rtic_app.next() {
+                if let Some(TokenTree::Group(g)) = g.stream().into_iter().nth(1) {
                     args = Some(g.stream());
                 }
             }
-            args.unwrap()
+            args.context("Failed to find RTIC app arguments")?
         };
         let app = rtic_app.collect::<TokenStream>();
 
@@ -377,7 +377,7 @@ impl<'a> TaskResolver<'a> {
         let target_dir = self
             .cargo
             .target_dir()
-            .unwrap()
+            .context("Could not find target directory for cargo")?
             .join("cargo-rtic-trace-libadhoc");
         include_dir!("assets/libadhoc")
             .extract(&target_dir)
@@ -436,7 +436,7 @@ impl<'a> TaskResolver<'a> {
             .map(|b| {
                 let func: libloading::Symbol<extern "C" fn() -> u8> = unsafe {
                     lib.get(format!("{}{}", ADHOC_FUNC_PREFIX, b).as_bytes())
-                        .unwrap()
+                        .expect("libadhoc was not correctly generated")
                 };
                 (b.clone(), func())
             })
