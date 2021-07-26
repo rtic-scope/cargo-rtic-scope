@@ -1,5 +1,5 @@
 use crate::recovery::Metadata;
-use crate::sources::{Source, BufferStatus};
+use crate::sources::{BufferStatus, Source};
 
 use std::fs;
 use std::io::BufReader;

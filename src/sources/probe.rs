@@ -48,10 +48,7 @@ impl Iterator for ProbeSource {
                 Ok(Some(packets)) => return Some(Ok(packets)),
                 Err(e) => {
                     self.decoder.state = DecoderState::Header;
-                    return Some(Err(anyhow!(
-                        "Failed to decode packets from probe: {:?}",
-                        e
-                    )));
+                    return Some(Err(anyhow!("Failed to decode packets from probe: {:?}", e)));
                 }
             }
         }

@@ -57,11 +57,7 @@ impl FileSink {
 
     /// Initializes the sink with metadata: task resolve maps and target
     /// reset timestamp.
-    pub fn init<F>(
-        &mut self,
-        maps: TaskResolveMaps,
-        reset_fun: F,
-    ) -> Result<Metadata>
+    pub fn init<F>(&mut self, maps: TaskResolveMaps, reset_fun: F) -> Result<Metadata>
     where
         F: FnOnce() -> Result<u32>,
     {
