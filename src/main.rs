@@ -9,8 +9,10 @@ use std::sync::{
 };
 
 use anyhow::{anyhow, bail, Context, Result};
-use probe_rs::flashing;
-use probe_rs_cli_util::flash::{list_connected_probes, print_families, CargoOptions, FlashOptions};
+use probe_rs_cli_util::{
+    common_options::{CargoOptions, FlashOptions},
+    flash,
+};
 use structopt::StructOpt;
 
 mod build;
@@ -97,10 +99,13 @@ enum Command {
 }
 
 fn main() -> Result<()> {
-    let opts = Opts::from_iter(
-        // NOTE(skip): first argument is the subcommand name
-        env::args().skip(1),
-    );
+    let matches = Opts::clap()
+        .after_help(CargoOptions::help_message("cargo rtic-scope trace").as_str())
+        .get_matches_from(
+            // NOTE(skip): first argument is the subcommand name
+            env::args().skip(1),
+        );
+    let opts = Opts::from_clap(&matches);
 
     // Setup SIGINT handler
     let halt = Arc::new(AtomicBool::new(false));
@@ -251,16 +256,6 @@ fn build_target_binary(opts: &CargoOptions) -> Result<(build::CargoWrapper, buil
         &env::current_dir()?,
         match opts {
             CargoOptions {
-                bin: Some(bin),
-                example: None,
-                ..
-            } => format!("--bin {}", bin),
-            CargoOptions {
-                bin: None,
-                example: Some(example),
-                ..
-            } => format!("--example {}", example),
-            CargoOptions {
                 bin: None,
                 example: None,
                 ..
@@ -270,6 +265,7 @@ fn build_target_binary(opts: &CargoOptions) -> Result<(build::CargoWrapper, buil
                 example: Some(_),
                 ..
             } => bail!("Ambiguity error: please specify only --bin or --example"),
+            _ => opts.to_cargo_arguments().join(" "),
         },
         "bin",
     )?;
@@ -290,13 +286,8 @@ type TraceTuple = (
 );
 
 fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
-    if opts.flash_options.list_probes {
-        list_connected_probes(std::io::stdout()).context("Failed to list connected probes")?;
-        return Ok(None);
-    }
-
-    if opts.flash_options.list_chips {
-        print_families(std::io::stdout()).context("Failed to list chip families")?;
+    opts.flash_options.probe_options.maybe_load_chip_desc()?;
+    if opts.flash_options.early_exit(std::io::stdout())? {
         return Ok(None);
     }
 
@@ -305,8 +296,9 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
 
     let mut session = opts
         .flash_options
-        .target_session()
-        .context("Failed to attach to target session")?;
+        .probe_options
+        .simple_attach()
+        .context("Faled to attach to target session")?;
 
     // TODO make this into Sink::generate().remove_old(), etc.
     let mut trace_sink = sinks::FileSink::generate_trace_file(
@@ -325,17 +317,12 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
         .context("Failed to resolve tasks")?;
 
     // Flash binary to target
-    //
-    // TODO use a progress bar alike cargo-flash
-    //
-    // TODO skip flash if correct bin already flashed. We check that by
-    // downloding the binary and comparing hashes (unless there is HW
-    // that does this for us)
     let elf = artifact.executable.unwrap();
-    eprintln!("Flashing {}...", elf.display());
-    flashing::download_file(&mut session, &elf, flashing::Format::Elf)
-        .context("Failed to flash target firmware")?;
-    eprintln!("Flashed.");
+    let flashloader = opts
+        .flash_options
+        .probe_options
+        .build_flashloader(&mut session, &elf)?;
+    flash::run_flash_download(&mut session, &elf, &opts.flash_options, flashloader)?;
 
     let mut trace_source: Box<dyn sources::Source> = if let Some(dev) = &opts.serial {
         Box::new(sources::TTYSource::new(
@@ -355,7 +342,7 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
             eprintln!("Resetting target...");
             // let mut core = session.core(0)?;
             // core.reset().context("Unable to reset target")?;
-            trace_source.reset_target()?;
+            trace_source.reset_target()?; // XXX halt-and-reset opt not handled
             eprintln!("Reset.");
 
             let freq = if let Some(freq) = opts.tpiu.clk_freq {
