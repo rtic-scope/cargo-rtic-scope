@@ -31,15 +31,26 @@ pub struct Metadata {
     maps: TaskResolveMaps,
     timestamp: chrono::DateTime<Local>,
     freq: u32,
+    comment: Option<String>,
 }
 
 impl Metadata {
-    pub fn new(maps: TaskResolveMaps, timestamp: chrono::DateTime<Local>, freq: u32) -> Self {
+    pub fn new(
+        maps: TaskResolveMaps,
+        timestamp: chrono::DateTime<Local>,
+        freq: u32,
+        comment: Option<String>,
+    ) -> Self {
         Self {
             maps,
             timestamp,
             freq,
+            comment,
         }
+    }
+
+    pub fn comment(&self) -> String {
+        self.comment.clone().unwrap_or("".to_string())
     }
 
     pub fn resolve_event_chunk(&self, packets: TimestampedTracePackets) -> Result<EventChunk> {

@@ -44,11 +44,9 @@ struct TraceOpts {
     #[structopt(long = "trace-dir", parse(from_os_str))]
     trace_dir: Option<PathBuf>,
 
-    // TODO utilize
-    /// Arbitrary comment that describes the trace. Currently not in
-    /// use.
+    /// Arbitrary comment that describes the trace.
     #[structopt(long = "comment", short = "c")]
-    trace_comment: Option<String>,
+    comment: Option<String>,
 
     /// Remove all previous traces from <trace-dir>.
     #[structopt(long = "clear-traces")]
@@ -337,7 +335,7 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
     // Sample the timestamp of target reset, wait for trace clock
     // frequency payload, flush metadata to file.
     let metadata = trace_sink
-        .init(maps, || {
+        .init(maps, opts.comment.clone(), || {
             // Reset the target to  execute flashed binary
             eprintln!("Resetting target...");
             // let mut core = session.core(0)?;
@@ -379,7 +377,10 @@ fn replay(opts: &ReplayOpts) -> Result<Option<TraceTuple>> {
 
     if opts.list {
         for (i, trace) in traces.enumerate() {
-            println!("{}\t{}", i, trace.display());
+            let metadata =
+                sources::FileSource::new(fs::OpenOptions::new().read(true).open(&trace)?)?
+                    .metadata();
+            println!("{}\t{}\t{}", i, trace.display(), metadata.comment());
         }
 
         return Ok(None);
