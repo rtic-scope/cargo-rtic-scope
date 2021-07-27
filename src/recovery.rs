@@ -1,4 +1,5 @@
 use crate::build::CargoWrapper;
+use crate::PACProperties;
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -152,10 +153,11 @@ pub struct TaskResolver<'a> {
     cargo: &'a CargoWrapper,
     app: TokenStream,
     app_args: TokenStream,
+    pacp: PACProperties,
 }
 
 impl<'a> TaskResolver<'a> {
-    pub fn new(artifact: &Artifact, cargo: &'a CargoWrapper) -> Result<Self> {
+    pub fn new(artifact: &Artifact, cargo: &'a CargoWrapper, pacp: PACProperties) -> Result<Self> {
         // parse the RTIC app from the source file
         let src = fs::read_to_string(&artifact.target.src_path).context("Failed to open file")?;
         let mut rtic_app = syn::parse_str::<TokenStream>(&src)
@@ -184,6 +186,7 @@ impl<'a> TaskResolver<'a> {
             cargo,
             app,
             app_args,
+            pacp,
         })
     }
 
@@ -328,19 +331,11 @@ impl<'a> TaskResolver<'a> {
             });
         let binds = ext_binds.clone();
 
-        // Parse out the PAC from #[app(device = ...)] and resolve exception
-        // numbers from bound idents.
-        let device_arg: Vec<syn::Ident> = match app.args.device.as_ref() {
-            None => bail!("expected argument #[app(device = ...)] is missing"),
-            Some(device) => device.segments.iter().map(|ps| ps.ident.clone()).collect(),
-        };
-        let excpt_nrs = match &device_arg[..] {
-            _ if ext_binds.is_empty() => BTreeMap::<Ident, u8>::new(),
-            [crate_name] => self.resolve_int_nrs(&binds, &crate_name, None)?,
-            [crate_name, crate_feature] => {
-                self.resolve_int_nrs(&binds, &crate_name, Some(&crate_feature))?
-            }
-            _ => bail!("argument passed to #[app(device = ...)] cannot be parsed"),
+        // Resolve exception numbers from bound idents
+        let excpt_nrs = if ext_binds.is_empty() {
+            BTreeMap::<Ident, u8>::new()
+        } else {
+            self.resolve_int_nrs(&binds)?
         };
 
         let int_assocs: InternalHwAssocs = app
@@ -375,12 +370,7 @@ impl<'a> TaskResolver<'a> {
         Ok((int_assocs, ext_assocs))
     }
 
-    fn resolve_int_nrs(
-        &self,
-        binds: &[Ident],
-        crate_name: &Ident,
-        crate_feature: Option<&Ident>,
-    ) -> Result<BTreeMap<Ident, u8>> {
+    fn resolve_int_nrs(&self, binds: &[Ident]) -> Result<BTreeMap<Ident, u8>> {
         const ADHOC_FUNC_PREFIX: &str = "rtic_scope_func_";
 
         // Extract adhoc source to a temporary directory and apply adhoc
@@ -404,12 +394,14 @@ impl<'a> TaskResolver<'a> {
                 .append(true)
                 .open(target_dir.join("Cargo.toml"))?;
             let dep = format!(
-                "\n{} = {{ version = \"\", features = [\"{}\"]}}\n",
-                crate_name,
-                match crate_feature {
-                    Some(feat) => format!("{}", feat),
-                    None => "".to_string(),
-                }
+                "\n{} = {{ version = \"\", features = [{}]}}\n",
+                self.pacp.name,
+                self.pacp
+                    .features
+                    .iter()
+                    .map(|f| format!("\"{}\"", f))
+                    .collect::<Vec<String>>()
+                    .join(","),
             );
             manifest.write_all(dep.as_bytes())?;
         }
@@ -419,10 +411,8 @@ impl<'a> TaskResolver<'a> {
             let mut src = fs::OpenOptions::new()
                 .append(true)
                 .open(target_dir.join("src/lib.rs"))?;
-            let import = match crate_feature {
-                Some(_) => quote!(use #crate_name::#crate_feature::Interrupt;),
-                None => quote!(use #crate_name::Interrupt;),
-            };
+            let import = &self.pacp.interrupt_path;
+            let import = quote!(use #import;);
             src.write_all(format!("\n{}\n", import).as_bytes())?;
 
             // Generate the functions that must be exported

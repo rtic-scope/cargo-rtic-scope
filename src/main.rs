@@ -13,6 +13,7 @@ use probe_rs_cli_util::{
     common_options::{CargoOptions, FlashOptions},
     flash,
 };
+use serde::Deserialize;
 use structopt::StructOpt;
 
 mod build;
@@ -51,6 +52,18 @@ struct TraceOpts {
     /// Remove all previous traces from <trace-dir>.
     #[structopt(long = "clear-traces")]
     remove_prev_traces: bool,
+
+    /// Name of the PAC used in traced application.
+    #[structopt(long = "pac")]
+    pac: Option<String>,
+
+    /// Features of the PAC used in traced application.
+    #[structopt(long = "pac-features")]
+    pac_features: Option<Vec<String>>,
+
+    /// Path to PAC Interrupt enum.
+    #[structopt(long = "pac-interrupt-path")]
+    pac_interrupt_path: Option<String>,
 
     #[structopt(flatten)]
     tpiu: TPIUOptions,
@@ -283,6 +296,15 @@ type TraceTuple = (
     recovery::Metadata,
 );
 
+#[derive(Deserialize, Debug)]
+pub struct PACProperties {
+    #[serde(rename = "pac")]
+    name: String,
+    #[serde(rename = "pac_features")]
+    features: Vec<String>,
+    interrupt_path: String,
+}
+
 fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
     opts.flash_options.probe_options.maybe_load_chip_desc()?;
     if opts.flash_options.early_exit(std::io::stdout())? {
@@ -308,8 +330,51 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
     )
     .context("Failed to generate trace sink file")?;
 
+    // Find crate name, features and path to interrupt enum from
+    // manifest metadata, or override options.
+    let pacp = {
+        let manifest_path = opts
+            .flash_options
+            .cargo_options
+            .manifest_path
+            .clone()
+            .unwrap_or(find_manifest_path(&artifact)?);
+        let metadata = cargo_metadata::MetadataCommand::new()
+            .manifest_path(&manifest_path)
+            .exec()
+            .context("Failed to read application metadata")?;
+        let package = metadata
+            .packages
+            .iter()
+            .find(|p| p.manifest_path == manifest_path)
+            .context("Could not find top-level package")?;
+        let mut pacp: PACProperties = serde_json::from_value(
+            package
+                .metadata
+                .get("rtic-scope")
+                .unwrap_or_else(|| {
+                    eprintln!("Package-level rtic-scope metadata block missing. Using workspace-level metadata block as fallback.");
+                    &metadata.workspace_metadata.get("rtic-scope").unwrap_or(&serde_json::value::Value::Null)
+                })
+                .clone(),
+        ).context("Failed to read rtic-scope metadata block")?;
+
+        // Replace fields if overridden
+        if let Some(pac) = &opts.pac {
+            pacp.name = pac.clone();
+        }
+        if let Some(feats) = &opts.pac_features {
+            pacp.features = feats.clone();
+        }
+        if let Some(path) = &opts.pac_interrupt_path {
+            pacp.interrupt_path = path.clone();
+        }
+
+        pacp
+    };
+
     // Map IRQ numbers and DWT matches to their respective RTIC tasks
-    let maps = recovery::TaskResolver::new(&artifact, &cargo)
+    let maps = recovery::TaskResolver::new(&artifact, &cargo, pacp)
         .context("Failed to parse RTIC application source file")?
         .resolve()
         .context("Failed to resolve tasks")?;
@@ -398,4 +463,26 @@ fn replay(opts: &ReplayOpts) -> Result<Option<TraceTuple>> {
     }
 
     unreachable!();
+}
+
+fn find_manifest_path(artifact: &cargo_metadata::Artifact) -> Result<PathBuf> {
+    let mut path = artifact.executable.clone().unwrap();
+    path.pop();
+
+    loop {
+        if {
+            path.push("Cargo.toml");
+            path.exists()
+        } {
+            return Ok(path);
+        } else {
+            path.pop(); // remove Cargo.toml
+            if path.pop() {
+                // move up a directory
+                continue;
+            }
+
+            bail!("Failed to find manifest");
+        }
+    }
 }
