@@ -273,15 +273,9 @@ fn build_target_binary(opts: &CargoOptions) -> Result<(build::CargoWrapper, buil
         _ => (),
     };
 
-    // Ensure we have a working cargo
-    let mut cargo = build::CargoWrapper::new().context("Failed to setup cargo")?;
-
-    // Build the wanted binary
-    let artifact = cargo.build(&env::current_dir()?, Some(opts), "bin")?;
-
-    cargo.resolve_metadata(&artifact, opts)?;
-
-    Ok((cargo, artifact))
+    // Build the wanted binary and generate a wrapper around cargo that
+    // builds future crates into the artifact's target directory.
+    Ok(build::CargoWrapper::new(&env::current_dir()?, opts)?)
 }
 
 type TraceTuple = (

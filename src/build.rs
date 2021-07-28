@@ -19,69 +19,51 @@ pub struct CargoWrapper {
 
 /// A functioality wrapper around subproccess calls to cargo in PATH.
 impl CargoWrapper {
-    /// Checks if cargo exists in PATH and returns it wrapped in a Command.
-    fn cmd() -> Result<Command> {
-        let cargo = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-        let mut cargo = Command::new(cargo);
-        let _output = cargo
-            .output()
-            .with_context(|| format!("Unable to execute {:?}", cargo))?;
+    fn cmd() -> Command {
+        Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+    }
 
-        Ok(cargo)
+    fn intermediate() -> Self {
+        CargoWrapper {
+            target_dir: None,
+            app_manifest_path: None,
+            app_metadata: None,
+        }
     }
 
     /// Creates a new wrapper instance after ensuring that a cargo
     /// executable is available in `PATH`. Can be overridden via the
     /// `CARGO` environment variable.
-    pub fn new() -> Result<Self> {
-        // Early check if cargo exists. Because PATH is unlikely to
-        // change, a Command instance could potentially be passed around
-        // instead of recreated whenever one is needed, but it is not
-        // possible to reset the arguments of a Command. We may in any
-        // case want to consider a small refactor regarding this, when a
-        // better solution is found.
-        let _cargo = Self::cmd()?;
+    pub fn new(crate_root: &Path, opts: &CargoOptions) -> Result<(Self, Artifact)> {
+        let cargo = Self::intermediate();
+        let artifact = cargo.build(crate_root, Some(opts), "bin")?;
 
-        Ok(CargoWrapper {
-            target_dir: None,
-            app_manifest_path: None,
-            app_metadata: None,
-        })
-    }
-
-    pub fn resolve_metadata(&mut self, artifact: &Artifact, opts: &CargoOptions) -> Result<()> {
-        let cargo_args: Vec<String> = if opts.no_default_features {
+        // Resolve artifact metadata
+        let metadata_args: Vec<String> = if opts.no_default_features {
             vec!["--no-default-features".to_string()]
         } else if !opts.features.is_empty() {
             vec!["features".to_string(), opts.features.join(",")]
         } else {
             vec![]
         };
-
         let manifest_path = opts
             .manifest_path
             .clone()
             .unwrap_or(find_manifest_path(&artifact)?);
         let metadata = cargo_metadata::MetadataCommand::new()
             .manifest_path(&manifest_path)
-            .other_options(cargo_args)
+            .other_options(metadata_args)
             .exec()
             .context("Failed to read application metadata")?;
 
-        self.app_manifest_path = Some(manifest_path);
-        self.set_target_dir(metadata.target_directory.clone())?;
-        self.app_metadata = Some(metadata);
-
-        Ok(())
-    }
-
-    fn set_target_dir(&mut self, target_dir: PathBuf) -> Result<()> {
-        self.target_dir = Some(
-            target_dir
-                .canonicalize()
-                .with_context(|| format!("Failed to canonicalize {}", target_dir.display()))?,
-        );
-        Ok(())
+        Ok((
+            CargoWrapper {
+                target_dir: Some(metadata.target_directory.clone().canonicalize()?),
+                app_manifest_path: Some(manifest_path),
+                app_metadata: Some(metadata),
+            },
+            artifact,
+        ))
     }
 
     pub fn target_dir(&self) -> Option<&PathBuf> {
@@ -115,7 +97,7 @@ impl CargoWrapper {
         opts: Option<&CargoOptions>,
         expected_artifact_kind: &str,
     ) -> Result<Artifact> {
-        let mut cargo = Self::cmd()?;
+        let mut cargo = Self::cmd();
         cargo.arg("build");
         if let Some(opts) = opts {
             cargo.args(opts.to_cargo_arguments());
