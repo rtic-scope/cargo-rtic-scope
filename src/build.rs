@@ -12,7 +12,6 @@ use cargo_metadata::Message;
 use probe_rs_cli_util::common_options::CargoOptions;
 
 pub struct CargoWrapper {
-    build_options: Vec<String>,
     target_dir: Option<PathBuf>,
     app_manifest_path: Option<PathBuf>,
     app_metadata: Option<cargo_metadata::Metadata>,
@@ -39,10 +38,8 @@ impl CargoWrapper {
 
     /// Creates a new wrapper instance after ensuring that a cargo
     /// executable is available in `PATH`. Can be overridden via the
-    /// `CARGO` environment variable. Passed `build_options` is expected
-    /// to be a set off `cargo build` flags. These are applied in all
-    /// `build` calls.
-    pub fn new(build_options: Vec<String>) -> Result<Self> {
+    /// `CARGO` environment variable.
+    pub fn new() -> Result<Self> {
         // Early check if cargo exists. Because PATH is unlikely to
         // change, a Command instance could potentially be passed around
         // instead of recreated whenever one is needed, but it is not
@@ -52,7 +49,6 @@ impl CargoWrapper {
         let _cargo = Self::cmd()?;
 
         Ok(CargoWrapper {
-            build_options,
             target_dir: None,
             app_manifest_path: None,
             app_metadata: None,
@@ -130,13 +126,6 @@ impl CargoWrapper {
 
         assert!(!args.contains("--target-dir"));
         cargo.args(args.split_whitespace());
-
-        assert!(self
-            .build_options
-            .iter()
-            .find(|opt| opt.as_str() == "--target-dir")
-            .is_none());
-        cargo.args(&self.build_options);
 
         if let Some(target_dir) = self.target_dir() {
             assert!(target_dir.is_absolute());

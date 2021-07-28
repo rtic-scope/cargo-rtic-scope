@@ -260,7 +260,7 @@ fn main() -> Result<()> {
 
 fn build_target_binary(opts: &CargoOptions) -> Result<(build::CargoWrapper, build::Artifact)> {
     // Ensure we have a working cargo
-    let mut cargo = build::CargoWrapper::new(vec![]).context("Failed to setup cargo")?;
+    let mut cargo = build::CargoWrapper::new().context("Failed to setup cargo")?;
 
     // Build the wanted binary
     let artifact = cargo.build(
