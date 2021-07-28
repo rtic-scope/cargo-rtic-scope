@@ -281,11 +281,7 @@ fn build_target_binary(opts: &CargoOptions) -> Result<(build::CargoWrapper, buil
         "bin",
     )?;
 
-    // Internally resolve the build cache used when building the
-    // artifact. It will henceforth be reused by all subsequent build
-    // operations and as the default directory for saving recorded
-    // traces.
-    cargo.resolve_target_dir(&artifact)?;
+    cargo.resolve_metadata(&artifact, opts)?;
 
     Ok((cargo, artifact))
 }
@@ -333,21 +329,8 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
     // Find crate name, features and path to interrupt enum from
     // manifest metadata, or override options.
     let pacp = {
-        let manifest_path = opts
-            .flash_options
-            .cargo_options
-            .manifest_path
-            .clone()
-            .unwrap_or(find_manifest_path(&artifact)?);
-        let metadata = cargo_metadata::MetadataCommand::new()
-            .manifest_path(&manifest_path)
-            .exec()
-            .context("Failed to read application metadata")?;
-        let package = metadata
-            .packages
-            .iter()
-            .find(|p| p.manifest_path == manifest_path)
-            .context("Could not find top-level package")?;
+        let package = cargo.package().unwrap();
+        let metadata = cargo.metadata().unwrap();
         let mut pacp: PACProperties = serde_json::from_value(
             package
                 .metadata
@@ -463,26 +446,4 @@ fn replay(opts: &ReplayOpts) -> Result<Option<TraceTuple>> {
     }
 
     unreachable!();
-}
-
-fn find_manifest_path(artifact: &cargo_metadata::Artifact) -> Result<PathBuf> {
-    let mut path = artifact.executable.clone().unwrap();
-    path.pop();
-
-    loop {
-        if {
-            path.push("Cargo.toml");
-            path.exists()
-        } {
-            return Ok(path);
-        } else {
-            path.pop(); // remove Cargo.toml
-            if path.pop() {
-                // move up a directory
-                continue;
-            }
-
-            bail!("Failed to find manifest");
-        }
-    }
 }

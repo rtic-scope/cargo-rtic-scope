@@ -6,13 +6,16 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use anyhow::{bail, Context, Result};
+use cargo_metadata;
 pub use cargo_metadata::Artifact;
 use cargo_metadata::Message;
-use regex::Regex;
+use probe_rs_cli_util::common_options::CargoOptions;
 
 pub struct CargoWrapper {
     build_options: Vec<String>,
     target_dir: Option<PathBuf>,
+    app_manifest_path: Option<PathBuf>,
+    app_metadata: Option<cargo_metadata::Metadata>,
 }
 
 /// A functioality wrapper around subproccess calls to cargo in PATH.
@@ -39,132 +42,47 @@ impl CargoWrapper {
     /// `CARGO` environment variable. Passed `build_options` is expected
     /// to be a set off `cargo build` flags. These are applied in all
     /// `build` calls.
-    pub fn new(mut build_options: Vec<String>) -> Result<Self> {
+    pub fn new(build_options: Vec<String>) -> Result<Self> {
         // Early check if cargo exists. Because PATH is unlikely to
         // change, a Command instance could potentially be passed around
         // instead of recreated whenever one is needed, but it is not
         // possible to reset the arguments of a Command. We may in any
         // case want to consider a small refactor regarding this, when a
         // better solution is found.
-        let mut cargo = Self::cmd()?;
-
-        let target_dir =
-            if let Some(pos) = build_options.iter().position(|opt| opt == "--target-dir") {
-                let path = PathBuf::from(if let Some(path) = build_options.get(pos + 1) {
-                    path
-                } else {
-                    bail!("--target-dir passed, but without argument");
-                })
-                .canonicalize()?;
-                build_options.remove(pos + 1);
-                build_options.remove(pos);
-                Some(path)
-            } else {
-                None
-            };
-
-        // Only require +nightly toolchain if build cache isn't
-        // otherwise set explicitly.
-        if env::var_os("CARGO_TARGET_DIR").is_none()
-            && target_dir.is_none()
-            && !cargo
-                .args("+nightly -Z unstable-features config get --version".split_whitespace())
-                .output()
-                .unwrap() // safe, output was tested in Self::cmd
-                .status
-                .success()
-        {
-            bail!("Neither CARGO_TARGET_DIR nor --target-dir was set. A nightly toolchain is then required to resolve the build cache until <https://github.com/rust-lang/cargo/issues/9301> is stabilized. Install one via rustup install nightly. The following check failed: {:?}", cargo);
-        }
+        let _cargo = Self::cmd()?;
 
         Ok(CargoWrapper {
             build_options,
-            target_dir,
+            target_dir: None,
+            app_manifest_path: None,
+            app_metadata: None,
         })
     }
 
-    /// Finds the configured build cache (usually a `target/` in the
-    /// crate root) as reported by cargo. Any subsequent calls to
-    /// `build` will reuse this build cache.
-    ///
-    /// TODO support sccache?
-    pub fn resolve_target_dir(&mut self, artifact: &Artifact) -> Result<()> {
-        type ResolveType = Result<Option<String>>;
-
-        if self.target_dir().is_some() {
-            return Ok(());
-        }
-
-        // first, check env variable which has highest prio
-        let via_environment = || -> ResolveType {
-            if let Some(val) = env::var_os("CARGO_TARGET_DIR") {
-                Ok(Some(val.to_str().unwrap().to_string()))
-            } else {
-                Ok(None)
-            }
+    pub fn resolve_metadata(&mut self, artifact: &Artifact, opts: &CargoOptions) -> Result<()> {
+        let cargo_args: Vec<String> = if opts.no_default_features {
+            vec!["--no-default-features".to_string()]
+        } else if !opts.features.is_empty() {
+            vec!["features".to_string(), opts.features.join(",")]
+        } else {
+            vec![]
         };
 
-        // then, check cargo +nightly -Z unstable-options config get
-        // build.target-dir
-        let via_cargo_config = || -> ResolveType {
-            let mut cargo = Self::cmd()?;
-            let output = cargo
-                .args(
-                    "+nightly -Z unstable-options config get --format json-value build.target-dir"
-                        .split_whitespace(),
-                )
-                .output()?;
-            if output.status.success() {
-                let path = String::from_utf8(output.stdout)
-                    .context("build.target-dir is not a valid UTF8 string")?;
+        let manifest_path = opts
+            .manifest_path
+            .clone()
+            .unwrap_or(find_manifest_path(&artifact)?);
+        let metadata = cargo_metadata::MetadataCommand::new()
+            .manifest_path(&manifest_path)
+            .other_options(cargo_args)
+            .exec()
+            .context("Failed to read application metadata")?;
 
-                Ok(Some(
-                    // trim surrounding quotes
-                    Regex::new(r#""(.*)""#)
-                        .unwrap()
-                        .captures(&path)
-                        .context("Unable to parse build.target-dir")?
-                        .get(1)
-                        .unwrap()
-                        .as_str()
-                        .into(),
-                ))
-            } else {
-                Ok(None)
-            }
-        };
+        self.app_manifest_path = Some(manifest_path);
+        self.set_target_dir(metadata.target_directory.clone())?;
+        self.app_metadata = Some(metadata);
 
-        // lastly, if none of the above, return target/ which we find by
-        // going backwards over the generated artifact
-        let via_artifact_path = || -> ResolveType {
-            assert!(artifact.executable.is_some());
-            let mut path = artifact.executable.clone().unwrap();
-            while path.iter().last().unwrap().to_str().unwrap() != "target" {
-                path.pop();
-            }
-            Ok(Some(path.display().to_string()))
-        };
-
-        // Try to resolve the target directory, in order of method
-        // precedence. See
-        // <https://doc.rust-lang.org/cargo/guide/build-cache.html>.
-        //
-        // NOTE from local tests, --target-dir have precedence over
-        // environmental variables.
-        let methods: Vec<Box<dyn Fn() -> ResolveType>> = vec![
-            // --target-dir is checked in Self::new
-            Box::new(via_environment),
-            Box::new(via_cargo_config),
-            Box::new(via_artifact_path),
-        ];
-        for method in methods {
-            if let Ok(Some(path)) = method() {
-                self.set_target_dir(PathBuf::from(path))?;
-                return Ok(());
-            }
-        }
-
-        bail!("Unable to resolve target directory. Cannot continue.");
+        Ok(())
     }
 
     fn set_target_dir(&mut self, target_dir: PathBuf) -> Result<()> {
@@ -178,6 +96,23 @@ impl CargoWrapper {
 
     pub fn target_dir(&self) -> Option<&PathBuf> {
         self.target_dir.as_ref()
+    }
+
+    pub fn metadata(&self) -> Option<&cargo_metadata::Metadata> {
+        self.app_metadata.as_ref()
+    }
+
+    pub fn package(&self) -> Option<&cargo_metadata::Package> {
+        // TODO use root_package instead?
+        let manifest_path = self.app_manifest_path.as_ref()?;
+        Some(
+            self.metadata()?
+                .packages
+                .iter()
+                .find(|p| p.manifest_path == *manifest_path)
+                .context("Could not find top-level package")
+                .ok()?,
+        )
     }
 
     /// Calls `cargo build` within the speficied `crate_root` with the
@@ -281,5 +216,27 @@ impl CargoWrapper {
         }
 
         Ok(target_artifact.unwrap())
+    }
+}
+
+fn find_manifest_path(artifact: &cargo_metadata::Artifact) -> Result<PathBuf> {
+    let mut path = artifact.executable.clone().unwrap();
+    path.pop();
+
+    loop {
+        if {
+            path.push("Cargo.toml");
+            path.exists()
+        } {
+            return Ok(path);
+        } else {
+            path.pop(); // remove Cargo.toml
+            if path.pop() {
+                // move up a directory
+                continue;
+            }
+
+            bail!("Failed to find manifest");
+        }
     }
 }

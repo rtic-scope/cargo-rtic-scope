@@ -228,7 +228,6 @@ dependencies = [
  "probe-rs-cli-util",
  "proc-macro2",
  "quote",
- "regex",
  "rtic-scope-api",
  "rtic-syntax",
  "serde",
