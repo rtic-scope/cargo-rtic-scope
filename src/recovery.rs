@@ -430,7 +430,7 @@ impl<'a> TaskResolver<'a> {
         }
 
         // Build the adhoc library, load it, and resolve all exception idents
-        let artifact = self.cargo.build(&target_dir, "".to_string(), "cdylib")?;
+        let artifact = self.cargo.build(&target_dir, None, "cdylib")?;
         let lib = unsafe { libloading::Library::new(artifact.filenames.first().unwrap())? };
         Ok(binds
             .into_iter()

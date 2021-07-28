@@ -259,27 +259,25 @@ fn main() -> Result<()> {
 }
 
 fn build_target_binary(opts: &CargoOptions) -> Result<(build::CargoWrapper, build::Artifact)> {
+    match opts {
+        CargoOptions {
+            bin: None,
+            example: None,
+            ..
+        } => bail!("Missing expected --bin or --example option"),
+        CargoOptions {
+            bin: Some(_),
+            example: Some(_),
+            ..
+        } => bail!("Ambiguity error: please specify only --bin or --example"),
+        _ => (),
+    };
+
     // Ensure we have a working cargo
     let mut cargo = build::CargoWrapper::new().context("Failed to setup cargo")?;
 
     // Build the wanted binary
-    let artifact = cargo.build(
-        &env::current_dir()?,
-        match opts {
-            CargoOptions {
-                bin: None,
-                example: None,
-                ..
-            } => bail!("Missing expected --bin or --example option"),
-            CargoOptions {
-                bin: Some(_),
-                example: Some(_),
-                ..
-            } => bail!("Ambiguity error: please specify only --bin or --example"),
-            _ => opts.to_cargo_arguments().join(" "),
-        },
-        "bin",
-    )?;
+    let artifact = cargo.build(&env::current_dir()?, Some(opts), "bin")?;
 
     cargo.resolve_metadata(&artifact, opts)?;
 

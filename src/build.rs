@@ -118,14 +118,14 @@ impl CargoWrapper {
     pub fn build(
         &self,
         crate_root: &Path,
-        args: String,
+        opts: Option<&CargoOptions>,
         expected_artifact_kind: &str,
     ) -> Result<Artifact> {
         let mut cargo = Self::cmd()?;
         cargo.arg("build");
-
-        assert!(!args.contains("--target-dir"));
-        cargo.args(args.split_whitespace());
+        if let Some(opts) = opts {
+            cargo.args(opts.to_cargo_arguments());
+        }
 
         if let Some(target_dir) = self.target_dir() {
             assert!(target_dir.is_absolute());
