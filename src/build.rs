@@ -13,7 +13,6 @@ use probe_rs_cli_util::common_options::CargoOptions;
 
 pub struct CargoWrapper {
     target_dir: Option<PathBuf>,
-    app_manifest_path: Option<PathBuf>,
     app_metadata: Option<cargo_metadata::Metadata>,
 }
 
@@ -26,7 +25,6 @@ impl CargoWrapper {
     fn intermediate() -> Self {
         CargoWrapper {
             target_dir: None,
-            app_manifest_path: None,
             app_metadata: None,
         }
     }
@@ -59,32 +57,24 @@ impl CargoWrapper {
         Ok((
             CargoWrapper {
                 target_dir: Some(metadata.target_directory.clone().canonicalize()?),
-                app_manifest_path: Some(manifest_path),
                 app_metadata: Some(metadata),
             },
             artifact,
         ))
     }
 
-    pub fn target_dir(&self) -> Option<&PathBuf> {
-        self.target_dir.as_ref()
+    pub fn target_dir(&self) -> &PathBuf {
+        self.target_dir.as_ref().unwrap()
     }
 
-    pub fn metadata(&self) -> Option<&cargo_metadata::Metadata> {
-        self.app_metadata.as_ref()
+    pub fn metadata(&self) -> &cargo_metadata::Metadata {
+        self.app_metadata.as_ref().unwrap()
     }
 
-    pub fn package(&self) -> Option<&cargo_metadata::Package> {
-        // TODO use root_package instead?
-        let manifest_path = self.app_manifest_path.as_ref()?;
-        Some(
-            self.metadata()?
-                .packages
-                .iter()
-                .find(|p| p.manifest_path == *manifest_path)
-                .context("Could not find top-level package")
-                .ok()?,
-        )
+    pub fn package(&self) -> Result<&cargo_metadata::Package> {
+        self.metadata()
+            .root_package()
+            .context("Could not find root package")
     }
 
     /// Calls `cargo build` within the speficied `crate_root` with the
@@ -103,10 +93,10 @@ impl CargoWrapper {
             cargo.args(opts.to_cargo_arguments());
         }
 
-        if let Some(target_dir) = self.target_dir() {
-            assert!(target_dir.is_absolute());
+        // NOTE target_dir() panics during intermediate build
+        if self.app_metadata.is_some() {
             cargo.arg("--target-dir");
-            cargo.arg(target_dir);
+            cargo.arg(self.target_dir());
         }
 
         cargo.arg("--message-format=json");

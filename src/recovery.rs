@@ -375,11 +375,7 @@ impl<'a> TaskResolver<'a> {
 
         // Extract adhoc source to a temporary directory and apply adhoc
         // modifications.
-        let target_dir = self
-            .cargo
-            .target_dir()
-            .context("Could not find target directory for cargo")?
-            .join("cargo-rtic-trace-libadhoc");
+        let target_dir = self.cargo.target_dir().join("cargo-rtic-trace-libadhoc");
         include_dir!("assets/libadhoc")
             .extract(&target_dir)
             .context("Failed to extract libadhoc")?;

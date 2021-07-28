@@ -313,7 +313,7 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
         &artifact,
         opts.trace_dir
             .as_ref()
-            .unwrap_or(&cargo.target_dir().unwrap().join("rtic-traces")),
+            .unwrap_or(&cargo.target_dir().join("rtic-traces")),
         opts.remove_prev_traces,
     )
     .context("Failed to generate trace sink file")?;
@@ -321,15 +321,13 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
     // Find crate name, features and path to interrupt enum from
     // manifest metadata, or override options.
     let pacp = {
-        let package = cargo.package().unwrap();
-        let metadata = cargo.metadata().unwrap();
         let mut pacp: PACProperties = serde_json::from_value(
-            package
+            cargo.package()?
                 .metadata
                 .get("rtic-scope")
                 .unwrap_or_else(|| {
                     eprintln!("Package-level rtic-scope metadata block missing. Using workspace-level metadata block as fallback.");
-                    &metadata.workspace_metadata.get("rtic-scope").unwrap_or(&serde_json::value::Value::Null)
+                    &cargo.metadata().workspace_metadata.get("rtic-scope").unwrap_or(&serde_json::value::Value::Null)
                 })
                 .clone(),
         ).context("Failed to read rtic-scope metadata block")?;
@@ -411,7 +409,7 @@ fn replay(opts: &ReplayOpts) -> Result<Option<TraceTuple>> {
             dir.to_path_buf()
         } else {
             let (cargo, _artifact) = build_target_binary(&opts.cargo_options)?;
-            cargo.target_dir().unwrap().join("rtic-traces")
+            cargo.target_dir().join("rtic-traces")
         }
     })?;
 
