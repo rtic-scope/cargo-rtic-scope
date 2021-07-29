@@ -42,7 +42,7 @@ impl Opts {
 /// Execute and trace a chosen application on a target device and record
 /// the trace stream to file.
 #[derive(StructOpt, Debug)]
-struct TraceOpts {
+struct TraceOptions {
     /// Optional serial device over which trace stream is expected,
     /// instead of a CMSIS-DAP device.
     #[structopt(name = "serial", long = "serial")]
@@ -82,7 +82,7 @@ struct TraceOpts {
     _cargo_args: Vec<String>,
 }
 
-impl TraceOpts {
+impl TraceOptions {
     pub const ARGUMENTS: &'static [&'static str] = &[
         "serial=",
         "trace-dir=",
@@ -113,7 +113,7 @@ impl TPIUOptions {
 
 /// Replay a previously recorded trace stream for post-mortem analysis.
 #[derive(StructOpt, Debug)]
-struct ReplayOpts {
+struct ReplayOptions {
     #[structopt(name = "list", long = "list", short = "l")]
     list: bool,
 
@@ -128,7 +128,7 @@ struct ReplayOpts {
     _cargo_args: Vec<String>,
 }
 
-impl ReplayOpts {
+impl ReplayOptions {
     pub const ARGUMENTS: &'static [&'static str] = &["list", "index=", "trace-dir="];
 }
 
@@ -136,10 +136,10 @@ impl ReplayOpts {
 enum Command {
     #[structopt(setting = structopt::clap::AppSettings::TrailingVarArg)]
     #[structopt(setting = structopt::clap::AppSettings::AllowLeadingHyphen)]
-    Trace(TraceOpts),
+    Trace(TraceOptions),
     #[structopt(setting = structopt::clap::AppSettings::TrailingVarArg)]
     #[structopt(setting = structopt::clap::AppSettings::AllowLeadingHyphen)]
-    Replay(ReplayOpts),
+    Replay(ReplayOptions),
 }
 
 fn main() -> Result<()> {
@@ -169,9 +169,9 @@ fn main() -> Result<()> {
     argument_handling::remove_arguments(
         &Opts::ARGUMENTS
             .iter()
-            .chain(TraceOpts::ARGUMENTS)
+            .chain(TraceOptions::ARGUMENTS)
             .chain(TPIUOptions::ARGUMENTS)
-            .chain(ReplayOpts::ARGUMENTS)
+            .chain(ReplayOptions::ARGUMENTS)
             .copied()
             .chain(common_options::common_arguments())
             .collect::<Vec<&str>>(),
@@ -338,7 +338,7 @@ pub struct PACProperties {
 }
 
 fn trace(
-    opts: &TraceOpts,
+    opts: &TraceOptions,
     cargo: &CargoWrapper,
     artifact: &Artifact,
 ) -> Result<Option<TraceTuple>> {
@@ -443,7 +443,7 @@ fn trace(
     Ok(Some((trace_source, vec![Box::new(trace_sink)], metadata)))
 }
 
-fn replay(opts: &ReplayOpts, cargo: &CargoWrapper) -> Result<Option<TraceTuple>> {
+fn replay(opts: &ReplayOptions, cargo: &CargoWrapper) -> Result<Option<TraceTuple>> {
     let mut traces = sinks::file::find_trace_files({
         if let Some(ref dir) = opts.trace_dir {
             dir.to_path_buf()
