@@ -17,7 +17,6 @@ cargo_metadata = "0.11"
 syn = "1"
 proc-macro2 = "1"
 quote = "1"
-probe-rs = "0.11"
 nix = "0.21.0"
 include_dir = "0.6.1"
 libloading = "0.7"
@@ -28,9 +27,14 @@ rtic-scope-api = "0.1.0-alpha"
 tempfile = "3"
 ctrlc = "3"
 
+[dependencies.probe-rs]
+version = "0.11"
+git = "https://github.com/probe-rs/probe-rs.git"
+
 [dependencies.probe-rs-cli-util]
 version = "0.11"
 default-features = false
+git = "https://github.com/probe-rs/probe-rs.git"
 
 [dependencies.anyhow]
 version = "1"
@@ -51,7 +55,3 @@ features = ["serde"]
 [dependencies.itm-decode]
 version = "0.4.0-alpha"
 features = ["serde"]
-
-[patch.crates-io]
-probe-rs = { git = "https://github.com/rtic-scope/probe-rs.git", branch = "adhoc/rtic-scope" }
-probe-rs-cli-util = { git = "https://github.com/rtic-scope/probe-rs.git", branch = "adhoc/rtic-scope" }

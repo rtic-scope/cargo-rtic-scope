@@ -27,7 +27,7 @@ version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3e61f2b7f93d2c7d2b08263acaa4a363b3e276806c68af6134c44f523bf1aacd"
 dependencies = [
- "gimli 0.25.0",
+ "gimli",
 ]
 
 [[package]]
@@ -112,7 +112,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "libc",
  "miniz_oxide",
- "object 0.26.0",
+ "object",
  "rustc-demangle",
 ]
 
@@ -166,14 +166,25 @@ dependencies = [
 
 [[package]]
 name = "bitvec"
-version = "0.22.3"
+version = "0.19.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5237f00a8c86130a0cc317830e558b966dd7850d48a953d998c813f01a41b527"
+checksum = "a7ba35e9565969edb811639dbebfe34edc0368e472c5018474c8eb2543397f81"
 dependencies = [
  "funty",
- "radium",
+ "radium 0.5.3",
  "tap",
- "wyz",
+ "wyz 0.2.0",
+]
+
+[[package]]
+name = "bitvec"
+version = "0.22.3"
+source = "git+https://github.com/bitvecto-rs/bitvec.git?tag=v0/22/3#fbfadf1ffe118e82afac5403d46ac3267dba5989"
+dependencies = [
+ "funty",
+ "radium 0.6.2",
+ "tap",
+ "wyz 0.4.0",
 ]
 
 [[package]]
@@ -194,9 +205,9 @@ checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
 name = "camino"
-version = "1.0.4"
+version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4648c6d00a709aa069a236adcaae4f605a6241c72bf5bee79331a4b625921a9"
+checksum = "52d74260d9bf6944e2208aa46841b4b8f0d7ffc0849a06837b2f510337f86b2b"
 dependencies = [
  "serde",
 ]
@@ -503,19 +514,13 @@ dependencies = [
 
 [[package]]
 name = "gimli"
-version = "0.24.0"
+version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e4075386626662786ddb0ec9081e7c7eeb1ba31951f447ca780ef9f5d568189"
+checksum = "f0a01e0497841a3b2db4f8afa483cce65f7e96a3498bd6c541734792aeac8fe7"
 dependencies = [
  "fallible-iterator",
  "stable_deref_trait",
 ]
-
-[[package]]
-name = "gimli"
-version = "0.25.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0a01e0497841a3b2db4f8afa483cce65f7e96a3498bd6c541734792aeac8fe7"
 
 [[package]]
 name = "git2"
@@ -657,7 +662,7 @@ checksum = "0b2ce7e46f122ad8793b76d463973569e82b18479d28515f48df9adfbcb5d44e"
 dependencies = [
  "anyhow",
  "bitmatch",
- "bitvec",
+ "bitvec 0.22.3",
  "cortex-m 0.6.7",
  "serde",
  "structopt",
@@ -901,15 +906,6 @@ checksum = "830b246a0e5f20af87141b25c173cd1b609bd7779a4617d6ec582abaf90870f3"
 
 [[package]]
 name = "object"
-version = "0.25.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a38f2be3697a57b4060074ff41b44c16870d916ad7877c17696e063257482bc7"
-dependencies = [
- "memchr",
-]
-
-[[package]]
-name = "object"
 version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c55827317fb4c08822499848a14237d2874d6f139828893017237e7ab93eb386"
@@ -944,22 +940,22 @@ checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
 [[package]]
 name = "probe-rs"
 version = "0.11.0"
-source = "git+https://github.com/rtic-scope/probe-rs.git?branch=adhoc/rtic-scope#1f60eef8ed3338195b90227fa3d7f440d10d9010"
+source = "git+https://github.com/probe-rs/probe-rs.git#ff8fd20b27fdff0c89c89c6e74cfbb1a49d762cc"
 dependencies = [
  "anyhow",
  "base64",
  "bincode",
  "bitfield",
- "bitvec",
+ "bitvec 0.19.4",
  "enum-primitive-derive",
- "gimli 0.24.0",
+ "gimli",
  "hidapi",
  "ihex",
  "jaylink",
  "jep106",
  "log",
  "num-traits",
- "object 0.25.3",
+ "object",
  "once_cell",
  "probe-rs-target",
  "rusb",
@@ -975,7 +971,7 @@ dependencies = [
 [[package]]
 name = "probe-rs-cli-util"
 version = "0.11.0"
-source = "git+https://github.com/rtic-scope/probe-rs.git?branch=adhoc/rtic-scope#1f60eef8ed3338195b90227fa3d7f440d10d9010"
+source = "git+https://github.com/probe-rs/probe-rs.git#ff8fd20b27fdff0c89c89c6e74cfbb1a49d762cc"
 dependencies = [
  "cargo_metadata 0.14.0",
  "cargo_toml",
@@ -996,7 +992,7 @@ dependencies = [
 [[package]]
 name = "probe-rs-target"
 version = "0.11.0"
-source = "git+https://github.com/rtic-scope/probe-rs.git?branch=adhoc/rtic-scope#1f60eef8ed3338195b90227fa3d7f440d10d9010"
+source = "git+https://github.com/probe-rs/probe-rs.git#ff8fd20b27fdff0c89c89c6e74cfbb1a49d762cc"
 dependencies = [
  "base64",
  "jep106",
@@ -1050,6 +1046,12 @@ checksum = "c3d0b9745dc2debf507c8422de05d7226cc1f0644216dfdfead988f9b1ab32a7"
 dependencies = [
  "proc-macro2",
 ]
+
+[[package]]
+name = "radium"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "941ba9d78d8e2f7ce474c015eea4d9c6d25b6a3327f9832ee29a4de27f91bbb8"
 
 [[package]]
 name = "radium"
@@ -1249,9 +1251,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.64"
+version = "1.0.65"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "799e97dc9fdae36a5c8b8f2cae9ce2ee9fdce2058c57a93e6099d919fd982f79"
+checksum = "28c5e91e4240b46c4c19219d6cc84784444326131a4210f496f948d5cc827a29"
 dependencies = [
  "itoa",
  "ryu",
@@ -1599,6 +1601,12 @@ name = "winapi-x86_64-pc-windows-gnu"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
+
+[[package]]
+name = "wyz"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85e60b0d1b5f99db2556934e21937020776a5d31520bf169e851ac44e6420214"
 
 [[package]]
 name = "wyz"
