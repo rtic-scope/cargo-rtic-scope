@@ -9,7 +9,6 @@ use anyhow::{bail, Context, Result};
 use cargo_metadata;
 pub use cargo_metadata::Artifact;
 use cargo_metadata::Message;
-use probe_rs_cli_util::common_options::CargoOptions;
 
 pub struct CargoWrapper {
     target_dir: Option<PathBuf>,
@@ -32,25 +31,22 @@ impl CargoWrapper {
     /// Creates a new wrapper instance after ensuring that a cargo
     /// executable is available in `PATH`. Can be overridden via the
     /// `CARGO` environment variable.
-    pub fn new(crate_root: &Path, opts: &CargoOptions) -> Result<(Self, Artifact)> {
+    pub fn new(crate_root: &Path, opts: Vec<String>) -> Result<(Self, Artifact)> {
         let cargo = Self::intermediate();
-        let artifact = cargo.build(crate_root, Some(opts), "bin")?;
+        let artifact = cargo.build(crate_root, Some(opts.clone()), "bin")?;
 
         // Resolve artifact metadata
-        let metadata_args: Vec<String> = if opts.no_default_features {
-            vec!["--no-default-features".to_string()]
-        } else if !opts.features.is_empty() {
-            vec!["features".to_string(), opts.features.join(",")]
-        } else {
-            vec![]
-        };
         let manifest_path = opts
-            .manifest_path
-            .clone()
-            .unwrap_or(find_manifest_path(&artifact)?);
+            .iter()
+            .position(|ref opt| opt.as_str() == "--manifest-path")
+            .and_then(|idx| opts.get(idx + 1))
+            .and_then(|arg| Some(PathBuf::from(arg)))
+            .unwrap_or(
+                find_manifest_path(&artifact)
+                    .context("Unable to resolve manifest path of target application")?,
+            );
         let metadata = cargo_metadata::MetadataCommand::new()
             .manifest_path(&manifest_path)
-            .other_options(metadata_args)
             .exec()
             .context("Failed to read application metadata")?;
 
@@ -84,13 +80,13 @@ impl CargoWrapper {
     pub fn build(
         &self,
         crate_root: &Path,
-        opts: Option<&CargoOptions>,
+        opts: Option<Vec<String>>,
         expected_artifact_kind: &str,
     ) -> Result<Artifact> {
         let mut cargo = Self::cmd();
         cargo.arg("build");
         if let Some(opts) = opts {
-            cargo.args(opts.to_cargo_arguments());
+            cargo.args(opts);
         }
 
         // NOTE target_dir() panics during intermediate build

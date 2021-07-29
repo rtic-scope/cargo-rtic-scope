@@ -8,9 +8,11 @@ use std::sync::{
     Arc,
 };
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
+use cargo_metadata::Artifact;
 use probe_rs_cli_util::{
-    common_options::{CargoOptions, FlashOptions},
+    argument_handling,
+    common_options::{self, cargo_help_message, FlashOptions},
     flash,
 };
 use serde::Deserialize;
@@ -21,6 +23,8 @@ mod recovery;
 mod sinks;
 mod sources;
 
+use build::CargoWrapper;
+
 #[derive(Debug, StructOpt)]
 struct Opts {
     /// The frontend to forward recorded/replayed trace to.
@@ -29,6 +33,10 @@ struct Opts {
 
     #[structopt(subcommand)]
     cmd: Command,
+}
+
+impl Opts {
+    pub const ARGUMENTS: &'static [&'static str] = &["frontend="];
 }
 
 /// Execute and trace a chosen application on a target device and record
@@ -70,6 +78,20 @@ struct TraceOpts {
 
     #[structopt(flatten)]
     flash_options: FlashOptions,
+
+    _cargo_args: Vec<String>,
+}
+
+impl TraceOpts {
+    pub const ARGUMENTS: &'static [&'static str] = &[
+        "serial=",
+        "trace-dir=",
+        "comment=",
+        "clear-traces",
+        "pac=",
+        "pac-features=",
+        "pac-interrupt-path=",
+    ];
 }
 
 #[derive(StructOpt, Debug)]
@@ -83,6 +105,10 @@ pub struct TPIUOptions {
     // Baud rate of the communication from the target TPIU.
     #[structopt(long = "tpiu-baud", default_value = "2000000")]
     baud_rate: u32,
+}
+
+impl TPIUOptions {
+    pub const ARGUMENTS: &'static [&'static str] = &["tpiu-freq=", "tpiu-baud="];
 }
 
 /// Replay a previously recorded trace stream for post-mortem analysis.
@@ -99,24 +125,62 @@ struct ReplayOpts {
     #[structopt(name = "trace-dir", long = "trace-dir", parse(from_os_str))]
     trace_dir: Option<PathBuf>,
 
-    #[structopt(flatten)]
-    cargo_options: CargoOptions,
+    _cargo_args: Vec<String>,
+}
+
+impl ReplayOpts {
+    pub const ARGUMENTS: &'static [&'static str] = &["list", "index=", "trace-dir="];
 }
 
 #[derive(StructOpt, Debug)]
 enum Command {
+    #[structopt(setting = structopt::clap::AppSettings::TrailingVarArg)]
+    #[structopt(setting = structopt::clap::AppSettings::AllowLeadingHyphen)]
     Trace(TraceOpts),
+    #[structopt(setting = structopt::clap::AppSettings::TrailingVarArg)]
+    #[structopt(setting = structopt::clap::AppSettings::AllowLeadingHyphen)]
     Replay(ReplayOpts),
 }
 
 fn main() -> Result<()> {
+    // Handle CLI options
+    let mut args: Vec<_> = std::env::args().collect();
+    // When called by cargo, first argument will be "rtic-scope".
+    if args.get(1) == Some(&"rtic-scope".to_string()) {
+        args.remove(1);
+    }
     let matches = Opts::clap()
-        .after_help(CargoOptions::help_message("cargo rtic-scope trace").as_str())
-        .get_matches_from(
-            // NOTE(skip): first argument is the subcommand name
-            env::args().skip(1),
-        );
+        .after_help(cargo_help_message("cargo rtic-scope trace").as_str())
+        .get_matches_from(&args);
     let opts = Opts::from_clap(&matches);
+
+    // Should be quit early?
+    if let Command::Trace(opts) = &opts.cmd {
+        let fo = &opts.flash_options;
+        fo.probe_options.maybe_load_chip_desc()?;
+        if fo.early_exit(std::io::stdout())? {
+            return Ok(());
+        }
+    }
+
+    // Remove arguments not to be forwarded to cargo
+    args.remove(0); // remove executable path
+    args.remove(0); // remove subcommand
+    argument_handling::remove_arguments(
+        &Opts::ARGUMENTS
+            .iter()
+            .chain(TraceOpts::ARGUMENTS)
+            .chain(TPIUOptions::ARGUMENTS)
+            .chain(ReplayOpts::ARGUMENTS)
+            .copied()
+            .chain(common_options::common_arguments())
+            .collect::<Vec<&str>>(),
+        &mut args,
+    );
+
+    // Build RTIC application to be traced, and create a wrapper around
+    // cargo, reusing the target directory of the application.
+    let (cargo, artifact) = CargoWrapper::new(&env::current_dir()?, args)?;
 
     // Setup SIGINT handler
     let halt = Arc::new(AtomicBool::new(false));
@@ -129,12 +193,12 @@ fn main() -> Result<()> {
     // Configure source and sinks. Recover the information we need to
     // map IRQ numbers to RTIC tasks.
     let (mut source, mut sinks, metadata) = match opts.cmd {
-        Command::Trace(ref opts) => match trace(opts)? {
+        Command::Trace(ref opts) => match trace(opts, &cargo, &artifact)? {
             Some(tup) => tup,
-            None => return Ok(()), // NOTE --list-{chips,probes} passed
+            None => return Ok(()),
         },
         Command::Replay(ref opts) => {
-            match replay(opts).with_context(|| {
+            match replay(opts, &cargo).with_context(|| {
                 format!("Failed to {}", {
                     if opts.list {
                         "index traces"
@@ -258,26 +322,6 @@ fn main() -> Result<()> {
     retstatus
 }
 
-fn build_target_binary(opts: &CargoOptions) -> Result<(build::CargoWrapper, build::Artifact)> {
-    match opts {
-        CargoOptions {
-            bin: None,
-            example: None,
-            ..
-        } => bail!("Missing expected --bin or --example option"),
-        CargoOptions {
-            bin: Some(_),
-            example: Some(_),
-            ..
-        } => bail!("Ambiguity error: please specify only --bin or --example"),
-        _ => (),
-    };
-
-    // Build the wanted binary and generate a wrapper around cargo that
-    // builds future crates into the artifact's target directory.
-    Ok(build::CargoWrapper::new(&env::current_dir()?, opts)?)
-}
-
 type TraceTuple = (
     Box<dyn sources::Source>,
     Vec<Box<dyn sinks::Sink>>,
@@ -293,15 +337,11 @@ pub struct PACProperties {
     interrupt_path: String,
 }
 
-fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
-    opts.flash_options.probe_options.maybe_load_chip_desc()?;
-    if opts.flash_options.early_exit(std::io::stdout())? {
-        return Ok(None);
-    }
-
-    let (cargo, artifact) = build_target_binary(&opts.flash_options.cargo_options)
-        .context("Failed to build target binary")?;
-
+fn trace(
+    opts: &TraceOpts,
+    cargo: &CargoWrapper,
+    artifact: &Artifact,
+) -> Result<Option<TraceTuple>> {
     let mut session = opts
         .flash_options
         .probe_options
@@ -353,7 +393,7 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
         .context("Failed to resolve tasks")?;
 
     // Flash binary to target
-    let elf = artifact.executable.unwrap();
+    let elf = artifact.executable.as_ref().unwrap();
     let flashloader = opts
         .flash_options
         .probe_options
@@ -403,12 +443,11 @@ fn trace(opts: &TraceOpts) -> Result<Option<TraceTuple>> {
     Ok(Some((trace_source, vec![Box::new(trace_sink)], metadata)))
 }
 
-fn replay(opts: &ReplayOpts) -> Result<Option<TraceTuple>> {
+fn replay(opts: &ReplayOpts, cargo: &CargoWrapper) -> Result<Option<TraceTuple>> {
     let mut traces = sinks::file::find_trace_files({
         if let Some(ref dir) = opts.trace_dir {
             dir.to_path_buf()
         } else {
-            let (cargo, _artifact) = build_target_binary(&opts.cargo_options)?;
             cargo.target_dir().join("rtic-traces")
         }
     })?;

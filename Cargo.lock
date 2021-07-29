@@ -166,25 +166,14 @@ dependencies = [
 
 [[package]]
 name = "bitvec"
-version = "0.19.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7ba35e9565969edb811639dbebfe34edc0368e472c5018474c8eb2543397f81"
-dependencies = [
- "funty",
- "radium 0.5.3",
- "tap",
- "wyz 0.2.0",
-]
-
-[[package]]
-name = "bitvec"
 version = "0.22.3"
-source = "git+https://github.com/bitvecto-rs/bitvec.git?tag=v0/22/3#fbfadf1ffe118e82afac5403d46ac3267dba5989"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5237f00a8c86130a0cc317830e558b966dd7850d48a953d998c813f01a41b527"
 dependencies = [
  "funty",
- "radium 0.6.2",
+ "radium",
  "tap",
- "wyz 0.4.0",
+ "wyz",
 ]
 
 [[package]]
@@ -662,7 +651,7 @@ checksum = "0b2ce7e46f122ad8793b76d463973569e82b18479d28515f48df9adfbcb5d44e"
 dependencies = [
  "anyhow",
  "bitmatch",
- "bitvec 0.22.3",
+ "bitvec",
  "cortex-m 0.6.7",
  "serde",
  "structopt",
@@ -940,13 +929,13 @@ checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
 [[package]]
 name = "probe-rs"
 version = "0.11.0"
-source = "git+https://github.com/probe-rs/probe-rs.git#ff8fd20b27fdff0c89c89c6e74cfbb1a49d762cc"
+source = "git+https://github.com/probe-rs/probe-rs.git?rev=e1528ee74a6b7df8eefb36b05e49aefc15ed630d#e1528ee74a6b7df8eefb36b05e49aefc15ed630d"
 dependencies = [
  "anyhow",
  "base64",
  "bincode",
  "bitfield",
- "bitvec 0.19.4",
+ "bitvec",
  "enum-primitive-derive",
  "gimli",
  "hidapi",
@@ -971,8 +960,9 @@ dependencies = [
 [[package]]
 name = "probe-rs-cli-util"
 version = "0.11.0"
-source = "git+https://github.com/probe-rs/probe-rs.git#ff8fd20b27fdff0c89c89c6e74cfbb1a49d762cc"
+source = "git+https://github.com/probe-rs/probe-rs.git?rev=e1528ee74a6b7df8eefb36b05e49aefc15ed630d#e1528ee74a6b7df8eefb36b05e49aefc15ed630d"
 dependencies = [
+ "anyhow",
  "cargo_metadata 0.14.0",
  "cargo_toml",
  "colored",
@@ -992,7 +982,7 @@ dependencies = [
 [[package]]
 name = "probe-rs-target"
 version = "0.11.0"
-source = "git+https://github.com/probe-rs/probe-rs.git#ff8fd20b27fdff0c89c89c6e74cfbb1a49d762cc"
+source = "git+https://github.com/probe-rs/probe-rs.git?rev=e1528ee74a6b7df8eefb36b05e49aefc15ed630d#e1528ee74a6b7df8eefb36b05e49aefc15ed630d"
 dependencies = [
  "base64",
  "jep106",
@@ -1046,12 +1036,6 @@ checksum = "c3d0b9745dc2debf507c8422de05d7226cc1f0644216dfdfead988f9b1ab32a7"
 dependencies = [
  "proc-macro2",
 ]
-
-[[package]]
-name = "radium"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "941ba9d78d8e2f7ce474c015eea4d9c6d25b6a3327f9832ee29a4de27f91bbb8"
 
 [[package]]
 name = "radium"
@@ -1601,12 +1585,6 @@ name = "winapi-x86_64-pc-windows-gnu"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
-
-[[package]]
-name = "wyz"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85e60b0d1b5f99db2556934e21937020776a5d31520bf169e851ac44e6420214"
 
 [[package]]
 name = "wyz"
