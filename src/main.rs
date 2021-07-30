@@ -29,7 +29,7 @@ use build::CargoWrapper;
 struct Opts {
     /// The frontend to forward recorded/replayed trace to.
     #[structopt(long = "frontend", short = "-F", default_value = "dummy")]
-    frontend: String,
+    frontends: Vec<String>,
 
     #[structopt(subcommand)]
     cmd: Command,
@@ -215,33 +215,38 @@ fn main() -> Result<()> {
 
     eprintln!("{}", &metadata);
 
-    // Spawn frontend child and get path to socket. Create and push sink.
-    let mut child = process::Command::new(format!("rtic-scope-frontend-{}", opts.frontend))
-        .stdout(process::Stdio::piped())
-        .stderr(process::Stdio::piped())
-        .spawn()
-        .context("Failed to spawn frontend child process")?;
-    {
-        let socket_path = {
-            std::io::BufReader::new(
-                child
-                    .stdout
-                    .take()
-                    .context("Failed to pipe frontend stdout")?,
-            )
-            .lines()
-            .next()
-            .context("next() failed")?
+    // Spawn frontend children and get path to sockets. Create and push sinks.
+    let mut children = vec![];
+    for frontend in &opts.frontends {
+        let mut child = process::Command::new(format!("rtic-scope-frontend-{}", frontend))
+            .stdout(process::Stdio::piped())
+            .stderr(process::Stdio::piped())
+            .spawn()
+            .context("Failed to spawn frontend child process")?;
+        {
+            let socket_path = {
+                std::io::BufReader::new(
+                    child
+                        .stdout
+                        .take()
+                        .context("Failed to pipe frontend stdout")?,
+                )
+                .lines()
+                .next()
+                .context("next() failed")?
+            }
+            .context("Failed to read socket path from frontend child process")?;
+            let socket = std::os::unix::net::UnixStream::connect(&socket_path)
+                .context("Failed to connect to frontend socket")?;
+            sinks.push(Box::new(sinks::FrontendSink::new(socket, metadata.clone())));
         }
-        .context("Failed to read socket path from frontend child process")?;
-        let socket = std::os::unix::net::UnixStream::connect(&socket_path)
-            .context("Failed to connect to frontend socket")?;
-        sinks.push(Box::new(sinks::FrontendSink::new(socket, metadata)));
+
+        let stderr = child
+            .stderr
+            .take()
+            .context("Failed to take frontend stderr")?;
+        children.push((child, stderr));
     }
-    let stderr = child
-        .stderr
-        .take()
-        .context("Failed to pipe frontend stderr")?;
 
     if let sources::BufferStatus::Unknown = source.avail_buffer() {
         eprintln!("Buffer size of source could not be found. Buffer may overflow and corrupt trace stream without warning.");
@@ -304,18 +309,22 @@ fn main() -> Result<()> {
     // close frontend sockets
     drop(sinks);
 
-    // Wait for frontend to proccess all packets and echo its stderr
-    {
+    // Wait for frontends to proccess all packets and echo its' stderr
+    for (i, (child, stderr)) in children.iter_mut().enumerate() {
         let status = child.wait();
         for err in BufReader::new(stderr).lines() {
             eprintln!(
                 "{}: {}",
-                opts.frontend,
+                opts.frontends.get(i).unwrap(),
                 err.context("Failed to read frontend stderr")?
             );
         }
         if let Err(err) = status {
-            eprintln!("Frontend {} exited with error: {}", opts.frontend, err);
+            eprintln!(
+                "Frontend {} exited with error: {}",
+                opts.frontends.get(i).unwrap(),
+                err
+            );
         }
     }
 
