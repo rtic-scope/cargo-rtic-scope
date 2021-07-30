@@ -159,7 +159,8 @@ pub struct TaskResolver<'a> {
 impl<'a> TaskResolver<'a> {
     pub fn new(artifact: &Artifact, cargo: &'a CargoWrapper, pacp: PACProperties) -> Result<Self> {
         // parse the RTIC app from the source file
-        let src = fs::read_to_string(&artifact.target.src_path).context("Failed to open file")?;
+        let src = fs::read_to_string(&artifact.target.src_path)
+            .context("Failed to open artifact source file")?;
         let mut rtic_app = syn::parse_str::<TokenStream>(&src)
             .context("Failed to tokenize file")?
             .into_iter()
@@ -296,10 +297,11 @@ impl<'a> TaskResolver<'a> {
     /// and associates the full path of hardware task functions to their
     /// exception numbers as reported by the target.
     fn hardware_tasks(&self) -> Result<(InternalHwAssocs, ExternalHwAssocs)> {
-        let mut settings = rtic_syntax::Settings::default();
-        settings.parse_binds = true;
-        let (app, _analysis) =
-            rtic_syntax::parse2(self.app_args.clone(), self.app.clone(), settings)?;
+        let (app, _analysis) = {
+            let mut settings = rtic_syntax::Settings::default();
+            settings.parse_binds = true;
+            rtic_syntax::parse2(self.app_args.clone(), self.app.clone(), settings)?
+        };
 
         // Find the bound exceptions from the #[task(bound = ...)]
         // arguments. Further, partition internal and external interrupts.
