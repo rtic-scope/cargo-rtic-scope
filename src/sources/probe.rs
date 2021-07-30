@@ -16,7 +16,7 @@ impl ProbeSource {
         //
         // NOTE(unwrap) --tpiu-freq is a requirement to enter this
         // function.
-        let cfg = SwoConfig::new(opts.clk_freq.unwrap())
+        let cfg = SwoConfig::new(opts.clk_freq)
             .set_baud(opts.baud_rate)
             .set_continuous_formatting(false);
         session.setup_swv(0, &cfg)?;

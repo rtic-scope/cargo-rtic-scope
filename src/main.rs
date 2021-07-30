@@ -97,10 +97,9 @@ impl TraceOptions {
 #[derive(StructOpt, Debug)]
 pub struct TPIUOptions {
     /// Speed in Hz of the TPIU trace clock. Used to calculate
-    /// timestamps of received timestamps. If not set, a DataTraceValue
-    /// packet containing the frequency is expected in the trace stream.
-    #[structopt(long = "tpiu-freq", required_unless("serial"))]
-    clk_freq: Option<u32>,
+    /// timestamps of received timestamps.
+    #[structopt(long = "tpiu-freq")]
+    clk_freq: u32,
 
     // Baud rate of the communication from the target TPIU.
     #[structopt(long = "tpiu-baud", default_value = "2000000")]
@@ -425,27 +424,10 @@ fn trace(
         .init(maps, opts.comment.clone(), || {
             // Reset the target to  execute flashed binary
             eprintln!("Resetting target...");
-            // let mut core = session.core(0)?;
-            // core.reset().context("Unable to reset target")?;
             trace_source.reset_target()?; // XXX halt-and-reset opt not handled
             eprintln!("Reset.");
 
-            let freq = if let Some(freq) = opts.tpiu.clk_freq {
-                freq
-            } else {
-                assert!(opts.serial.is_some());
-
-                // Wait for a non-zero trace clock frequency payload.
-                //
-                // NOTE A side-effect here is that we effectively disregard all
-                // packets that are emitted during target initialization. In
-                // local tests these packets have been but noise, so this is
-                // okay for the moment.
-                sources::wait_for_trace_clk_freq(&mut trace_source)
-                    .context("Failed to read trace clock frequency from source")?
-            };
-
-            Ok(freq)
+            Ok(opts.tpiu.clk_freq)
         })
         .context("Failed to initialize metadata")?;
 
