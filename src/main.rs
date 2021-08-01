@@ -217,11 +217,12 @@ fn main() -> Result<()> {
     // Spawn frontend children and get path to sockets. Create and push sinks.
     let mut children = vec![];
     for frontend in &opts.frontends {
-        let mut child = process::Command::new(format!("rtic-scope-frontend-{}", frontend))
+        let executable = format!("rtic-scope-frontend-{}", frontend);
+        let mut child = process::Command::new(executable)
             .stdout(process::Stdio::piped())
             .stderr(process::Stdio::piped())
             .spawn()
-            .context("Failed to spawn frontend child process")?;
+            .with_context(|| format!("Failed to spawn frontend child process {}", executable))?;
         {
             let socket_path = {
                 std::io::BufReader::new(
