@@ -25,8 +25,10 @@ impl FileSink {
         remove_prev_traces: bool,
     ) -> Result<Self> {
         if remove_prev_traces {
-            for trace in find_trace_files(trace_dir.to_path_buf())? {
-                fs::remove_file(trace).context("Failed to remove previous trace file")?;
+            if let Ok(traces) = find_trace_files(trace_dir.to_path_buf()) {
+                for trace in traces {
+                    fs::remove_file(trace).context("Failed to remove previous trace file")?;
+                }
             }
         }
 
