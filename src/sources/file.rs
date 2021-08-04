@@ -58,4 +58,8 @@ impl Source for FileSource {
     fn avail_buffer(&self) -> BufferStatus {
         BufferStatus::NotApplicable
     }
+
+    fn describe(&self) -> String {
+        format!("file ({:?})", self.reader.get_ref())
+    }
 }

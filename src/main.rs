@@ -10,6 +10,7 @@ use std::sync::{
 
 use anyhow::{anyhow, Context, Result};
 use cargo_metadata::Artifact;
+use colored::Colorize;
 use probe_rs_cli_util::{
     argument_handling,
     common_options::{self, cargo_help_message, FlashOptions},
@@ -193,6 +194,16 @@ fn main() -> Result<()> {
     })
     .context("Failed to install SIGINT handler")?;
 
+    eprintln!(
+        "  {} metadata for {prog} and preparing target...",
+        "Recovering".green().bold(),
+        prog = format!(
+            "{} ({})",
+            artifact.target.name,
+            artifact.target.src_path.display()
+        ),
+    );
+
     // Configure source and sinks. Recover the information we need to
     // map IRQ numbers to RTIC tasks.
     let (mut source, mut sinks, metadata) = match opts.cmd {
@@ -216,7 +227,14 @@ fn main() -> Result<()> {
         }
     };
 
-    eprintln!("{}", &metadata);
+    eprintln!(
+        "   {} {ntotal} task(s) from {prog}: {nhard} hard, {nsoft} soft. Target reset.",
+        "Recovered".green().bold(),
+        ntotal = metadata.hardware_tasks() + metadata.software_tasks(),
+        prog = artifact.target.name,
+        nhard = metadata.hardware_tasks(),
+        nsoft = metadata.software_tasks(),
+    );
 
     // Spawn frontend children and get path to sockets. Create and push sinks.
     let mut children = vec![];
@@ -253,8 +271,23 @@ fn main() -> Result<()> {
     }
 
     if let sources::BufferStatus::Unknown = source.avail_buffer() {
-        eprintln!("Buffer size of source could not be found. Buffer may overflow and corrupt trace stream without warning.");
+        eprintln!(
+            "{}: buffer size of source {} could not be found; buffer may overflow and corrupt trace stream without further warning",
+            "warning".yellow().bold(),
+            source.describe(),
+        );
     }
+
+    eprintln!(
+        "    {} {}...",
+        match &opts.cmd {
+            Command::Trace(_) => "Tracing",
+            Command::Replay(_) => "Replaying",
+        }
+        .green()
+        .bold(),
+        artifact.target.name,
+    );
 
     // All preparatory I/O and information recovery done. Forward all
     // trace packets to all sinks.
@@ -395,10 +428,8 @@ fn trace(
     // frequency payload, flush metadata to file.
     let metadata = trace_sink
         .init(maps, opts.comment.clone(), || {
-            // Reset the target to  execute flashed binary
-            eprintln!("Resetting target...");
+            // Reset the target to execute flashed binary
             trace_source.reset_target()?; // XXX halt-and-reset opt not handled
-            eprintln!("Reset.");
 
             Ok(opts.tpiu.clk_freq)
         })

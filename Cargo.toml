@@ -27,6 +27,7 @@ rtic-scope-api = "0.1.0-alpha"
 tempfile = "3"
 ctrlc = "3"
 thiserror = "1"
+colored = "2"
 
 [dependencies.probe-rs]
 version = "0.11"

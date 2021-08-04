@@ -22,6 +22,8 @@ pub trait Source: Iterator<Item = Result<TimestampedTracePackets>> {
     fn avail_buffer(&self) -> BufferStatus {
         BufferStatus::Unknown
     }
+
+    fn describe(&self) -> String;
 }
 
 mod file;

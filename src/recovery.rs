@@ -50,6 +50,14 @@ impl Metadata {
         }
     }
 
+    pub fn hardware_tasks(&self) -> usize {
+        self.maps.exceptions.len() + self.maps.interrupts.len()
+    }
+
+    pub fn software_tasks(&self) -> usize {
+        self.maps.sw_assocs.len()
+    }
+
     pub fn comment(&self) -> String {
         self.comment.clone().unwrap_or("".to_string())
     }

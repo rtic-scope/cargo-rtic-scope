@@ -239,4 +239,8 @@ impl Source for TTYSource {
             BufferStatus::Unknown
         }
     }
+
+    fn describe(&self) -> String {
+        format!("TTY (fd: {})", self.fd)
+    }
 }

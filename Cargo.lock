@@ -218,6 +218,7 @@ dependencies = [
  "cargo_metadata 0.11.4",
  "chrono",
  "clap",
+ "colored",
  "ctrlc",
  "git2",
  "include_dir",

@@ -94,7 +94,7 @@ impl Sink for FileSink {
     }
 
     fn describe(&self) -> String {
-        format!("file output: {:?}", self.file)
+        format!("file sink: {:?}", self.file)
     }
 }
 

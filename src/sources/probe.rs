@@ -64,4 +64,8 @@ impl Source for ProbeSource {
 
         Ok(())
     }
+
+    fn describe(&self) -> String {
+        format!("probe (attached to {})", self.session.target().name)
+    }
 }
