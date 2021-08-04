@@ -1123,8 +1123,6 @@ dependencies = [
 [[package]]
 name = "rtic-scope-api"
 version = "0.1.0-alpha.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc7c0c59237e98506e244360ed99c7b31ebcdd48a568c9041cdf80d0ba0b805a"
 dependencies = [
  "anyhow",
  "chrono",

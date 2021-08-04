@@ -6,7 +6,7 @@ use std::fmt;
 use std::fs;
 use std::io::Write;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use cargo_metadata::Artifact;
 use chrono::Local;
 use include_dir::include_dir;
@@ -77,7 +77,7 @@ impl Metadata {
             use itm_decode::cortex_m::VectActive;
 
             match excpt {
-                VectActive::ThreadMode => bail!("Don't know what to do with ThreadMode"), // XXX fix
+                VectActive::ThreadMode => Ok("ThreadMode".to_string()),
                 VectActive::Exception(e) => Ok(self
                     .maps
                     .exceptions
@@ -110,9 +110,8 @@ impl Metadata {
                         ExceptionAction::Returned => TaskAction::Returned,
                     },
                 }),
-                _ => {
-                    eprintln!("Don't know how to convert {:?}. Skipping...", packet);
-                }
+                // XXX Don't know how to convert
+                packet => events.push(EventType::Unknown(packet.clone())),
             }
         }
 
