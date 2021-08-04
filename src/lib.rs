@@ -48,4 +48,8 @@ pub enum EventType {
         /// What did the RTIC task do?
         action: TaskAction,
     },
+
+    /// Target emitted packages for which no RTIC information could be
+    /// associated.
+    Unknown(TracePacket)
 }
