@@ -1,5 +1,5 @@
 use crate::build::CargoWrapper;
-use crate::PACProperties;
+use crate::pacp::PACProperties;
 
 use std::collections::BTreeMap;
 use std::fmt;

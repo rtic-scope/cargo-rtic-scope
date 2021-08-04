@@ -15,10 +15,10 @@ use probe_rs_cli_util::{
     common_options::{self, cargo_help_message, FlashOptions},
     flash,
 };
-use serde::Deserialize;
 use structopt::StructOpt;
 
 mod build;
+mod pacp;
 mod recovery;
 mod sinks;
 mod sources;
@@ -61,17 +61,8 @@ struct TraceOptions {
     #[structopt(long = "clear-traces")]
     remove_prev_traces: bool,
 
-    /// Name of the PAC used in traced application.
-    #[structopt(long = "pac")]
-    pac: Option<String>,
-
-    /// Features of the PAC used in traced application.
-    #[structopt(long = "pac-features")]
-    pac_features: Option<Vec<String>>,
-
-    /// Path to PAC Interrupt enum.
-    #[structopt(long = "pac-interrupt-path")]
-    pac_interrupt_path: Option<String>,
+    #[structopt(flatten)]
+    pac: PACOptions,
 
     #[structopt(flatten)]
     tpiu: TPIUOptions,
@@ -92,6 +83,19 @@ impl TraceOptions {
         "pac-features=",
         "pac-interrupt-path=",
     ];
+#[derive(StructOpt, Debug)]
+pub struct PACOptions {
+    /// Name of the PAC used in traced application.
+    #[structopt(long = "pac", name = "pac")]
+    name: Option<String>,
+
+    /// Features of the PAC used in traced application.
+    #[structopt(long = "pac-features", name = "pac-features")]
+    features: Option<Vec<String>>,
+
+    /// Path to PAC Interrupt enum.
+    #[structopt(long = "pac-interrupt-path")]
+    interrupt_path: Option<String>,
 }
 
 #[derive(StructOpt, Debug)]
@@ -218,7 +222,7 @@ fn main() -> Result<()> {
     let mut children = vec![];
     for frontend in &opts.frontends {
         let executable = format!("rtic-scope-frontend-{}", frontend);
-        let mut child = process::Command::new(executable)
+        let mut child = process::Command::new(&executable)
             .stdout(process::Stdio::piped())
             .stderr(process::Stdio::piped())
             .spawn()
@@ -337,15 +341,6 @@ type TraceTuple = (
     recovery::Metadata,
 );
 
-#[derive(Deserialize, Debug)]
-pub struct PACProperties {
-    #[serde(rename = "pac")]
-    name: String,
-    #[serde(rename = "pac_features")]
-    features: Vec<String>,
-    interrupt_path: String,
-}
-
 fn trace(
     opts: &TraceOptions,
     cargo: &CargoWrapper,
@@ -369,31 +364,8 @@ fn trace(
 
     // Find crate name, features and path to interrupt enum from
     // manifest metadata, or override options.
-    let pacp = {
-        let mut pacp: PACProperties = serde_json::from_value(
-            cargo.package()?
-                .metadata
-                .get("rtic-scope")
-                .unwrap_or_else(|| {
-                    eprintln!("Package-level rtic-scope metadata block missing. Using workspace-level metadata block as fallback.");
-                    &cargo.metadata().workspace_metadata.get("rtic-scope").unwrap_or(&serde_json::value::Value::Null)
-                })
-                .clone(),
-        ).context("Failed to read rtic-scope metadata block")?;
-
-        // Replace fields if overridden
-        if let Some(pac) = &opts.pac {
-            pacp.name = pac.clone();
-        }
-        if let Some(feats) = &opts.pac_features {
-            pacp.features = feats.clone();
-        }
-        if let Some(path) = &opts.pac_interrupt_path {
-            pacp.interrupt_path = path.clone();
-        }
-
-        pacp
-    };
+    let pacp = pacp::PACProperties::new(&cargo, &opts.pac)
+        .context("Failed to complete PAC propeties from manifest metadata")?;
 
     // Map IRQ numbers and DWT matches to their respective RTIC tasks
     let maps = recovery::TaskResolver::new(&artifact, &cargo, pacp)

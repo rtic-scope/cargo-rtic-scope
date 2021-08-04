@@ -26,6 +26,7 @@ serde_json = "1"
 rtic-scope-api = "0.1.0-alpha"
 tempfile = "3"
 ctrlc = "3"
+thiserror = "1"
 
 [dependencies.probe-rs]
 version = "0.11"
