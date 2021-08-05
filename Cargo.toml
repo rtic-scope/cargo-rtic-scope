@@ -31,13 +31,13 @@ colored = "2"
 
 [dependencies.probe-rs]
 version = "0.11"
-git = "https://github.com/probe-rs/probe-rs.git"
-rev = "e1528ee74a6b7df8eefb36b05e49aefc15ed630d"
+git = "https://github.com/rtic-scope/probe-rs.git"
+rev = "b82c4a4845240833a76e299f4775680d04a87692"
 
 [dependencies.probe-rs-cli-util]
 version = "0.11"
-git = "https://github.com/probe-rs/probe-rs.git"
-rev = "e1528ee74a6b7df8eefb36b05e49aefc15ed630d"
+git = "https://github.com/rtic-scope/probe-rs.git"
+rev = "b82c4a4845240833a76e299f4775680d04a87692"
 
 [dependencies.anyhow]
 version = "1"

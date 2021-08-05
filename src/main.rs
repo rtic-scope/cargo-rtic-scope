@@ -12,8 +12,7 @@ use anyhow::{anyhow, Context, Result};
 use cargo_metadata::Artifact;
 use colored::Colorize;
 use probe_rs_cli_util::{
-    argument_handling,
-    common_options::{self, cargo_help_message, FlashOptions},
+    common_options::{CargoOptions, FlashOptions},
     flash,
 };
 use structopt::StructOpt;
@@ -36,10 +35,6 @@ struct Opts {
 
     #[structopt(subcommand)]
     cmd: Command,
-}
-
-impl Opts {
-    pub const ARGUMENTS: &'static [&'static str] = &["frontend="];
 }
 
 /// Execute and trace a chosen application on a target device and record
@@ -72,20 +67,8 @@ struct TraceOptions {
 
     #[structopt(flatten)]
     flash_options: FlashOptions,
-
-    _cargo_args: Vec<String>,
 }
 
-impl TraceOptions {
-    pub const ARGUMENTS: &'static [&'static str] = &[
-        "serial=",
-        "trace-dir=",
-        "comment=",
-        "clear-traces",
-        "pac=",
-        "pac-features=",
-        "pac-interrupt-path=",
-    ];
 #[derive(StructOpt, Debug)]
 pub struct PACOptions {
     /// Name of the PAC used in traced application.
@@ -131,20 +114,13 @@ struct ReplayOptions {
     #[structopt(name = "trace-dir", long = "trace-dir", parse(from_os_str))]
     trace_dir: Option<PathBuf>,
 
-    _cargo_args: Vec<String>,
-}
-
-impl ReplayOptions {
-    pub const ARGUMENTS: &'static [&'static str] = &["list", "index=", "trace-dir="];
+    #[structopt(flatten)]
+    cargo_options: CargoOptions,
 }
 
 #[derive(StructOpt, Debug)]
 enum Command {
-    #[structopt(setting = structopt::clap::AppSettings::TrailingVarArg)]
-    #[structopt(setting = structopt::clap::AppSettings::AllowLeadingHyphen)]
     Trace(TraceOptions),
-    #[structopt(setting = structopt::clap::AppSettings::TrailingVarArg)]
-    #[structopt(setting = structopt::clap::AppSettings::AllowLeadingHyphen)]
     Replay(ReplayOptions),
 }
 
@@ -156,7 +132,7 @@ fn main() -> Result<()> {
         args.remove(1);
     }
     let matches = Opts::clap()
-        .after_help(cargo_help_message("cargo rtic-scope trace").as_str())
+        .after_help(CargoOptions::help_message("cargo rtic-scope trace").as_str())
         .get_matches_from(&args);
     let opts = Opts::from_clap(&matches);
 
@@ -169,24 +145,18 @@ fn main() -> Result<()> {
         }
     }
 
-    // Remove arguments not to be forwarded to cargo
-    args.remove(0); // remove executable path
-    args.remove(0); // remove subcommand
-    argument_handling::remove_arguments(
-        &Opts::ARGUMENTS
-            .iter()
-            .chain(TraceOptions::ARGUMENTS)
-            .chain(TPIUOptions::ARGUMENTS)
-            .chain(ReplayOptions::ARGUMENTS)
-            .copied()
-            .chain(common_options::common_arguments())
-            .collect::<Vec<&str>>(),
-        &mut args,
-    );
-
     // Build RTIC application to be traced, and create a wrapper around
     // cargo, reusing the target directory of the application.
-    let (cargo, artifact) = CargoWrapper::new(&env::current_dir()?, args)?;
+    let (cargo, artifact) = CargoWrapper::new(
+        &env::current_dir()?,
+        {
+            match &opts.cmd {
+                Command::Trace(opts) => &opts.flash_options.cargo_options,
+                Command::Replay(opts) => &opts.cargo_options,
+            }
+        }
+        .to_cargo_options(),
+    )?;
 
     // Setup SIGINT handler
     let halt = Arc::new(AtomicBool::new(false));
