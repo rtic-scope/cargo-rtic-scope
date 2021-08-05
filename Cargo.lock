@@ -212,7 +212,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-rtic-scope"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "cargo_metadata 0.11.4",
@@ -259,7 +259,7 @@ checksum = "c297bd3135f558552f99a0daa180876984ea2c4ffa7470314540dff8c654109a"
 dependencies = [
  "camino",
  "cargo-platform",
- "semver 1.0.3",
+ "semver 1.0.4",
  "serde",
  "serde_json",
 ]
@@ -404,9 +404,9 @@ checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 
 [[package]]
 name = "embedded-hal"
-version = "0.2.5"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db184d3fa27bc7a2344250394c0264144dfe0bc81a4401801dcb964b8dd172ad"
+checksum = "e36cfb62ff156596c892272f3015ef952fe1525e85261fa3a7f327bd6b384ab9"
 dependencies = [
  "nb 0.1.3",
  "void",
@@ -647,9 +647,9 @@ dependencies = [
 
 [[package]]
 name = "itm-decode"
-version = "0.4.0-alpha.0"
+version = "0.4.0-alpha.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b2ce7e46f122ad8793b76d463973569e82b18479d28515f48df9adfbcb5d44e"
+checksum = "c5c9cbeb4b65026300e314c8eec1241811c304efbd5f4e9c12660d3044bca2c0"
 dependencies = [
  "anyhow",
  "bitmatch",
@@ -688,9 +688,9 @@ dependencies = [
 
 [[package]]
 name = "jobserver"
-version = "0.1.22"
+version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "972f5ae5d1cb9c6ae417789196c803205313edde988685da5e3aae0827b9e7fd"
+checksum = "f5ca711fd837261e14ec9e674f092cbb931d3fa1482b017ae59328ddc6f3212b"
 dependencies = [
  "libc",
 ]
@@ -931,7 +931,7 @@ checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
 [[package]]
 name = "probe-rs"
 version = "0.11.0"
-source = "git+https://github.com/probe-rs/probe-rs.git?rev=e1528ee74a6b7df8eefb36b05e49aefc15ed630d#e1528ee74a6b7df8eefb36b05e49aefc15ed630d"
+source = "git+https://github.com/rtic-scope/probe-rs.git?rev=b82c4a4845240833a76e299f4775680d04a87692#b82c4a4845240833a76e299f4775680d04a87692"
 dependencies = [
  "anyhow",
  "base64",
@@ -962,7 +962,7 @@ dependencies = [
 [[package]]
 name = "probe-rs-cli-util"
 version = "0.11.0"
-source = "git+https://github.com/probe-rs/probe-rs.git?rev=e1528ee74a6b7df8eefb36b05e49aefc15ed630d#e1528ee74a6b7df8eefb36b05e49aefc15ed630d"
+source = "git+https://github.com/rtic-scope/probe-rs.git?rev=b82c4a4845240833a76e299f4775680d04a87692#b82c4a4845240833a76e299f4775680d04a87692"
 dependencies = [
  "anyhow",
  "cargo_metadata 0.14.0",
@@ -984,7 +984,7 @@ dependencies = [
 [[package]]
 name = "probe-rs-target"
 version = "0.11.0"
-source = "git+https://github.com/probe-rs/probe-rs.git?rev=e1528ee74a6b7df8eefb36b05e49aefc15ed630d#e1528ee74a6b7df8eefb36b05e49aefc15ed630d"
+source = "git+https://github.com/rtic-scope/probe-rs.git?rev=b82c4a4845240833a76e299f4775680d04a87692#b82c4a4845240833a76e299f4775680d04a87692"
 dependencies = [
  "base64",
  "jep106",
@@ -1200,9 +1200,9 @@ dependencies = [
 
 [[package]]
 name = "semver"
-version = "1.0.3"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f3aac57ee7f3272d8395c6e4f502f434f0e289fcd62876f70daa008c20dcabe"
+checksum = "568a8e6258aa33c13358f81fd834adb854c6f7c9468520910a9b1e8fac068012"
 dependencies = [
  "serde",
 ]
@@ -1215,18 +1215,18 @@ checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 
 [[package]]
 name = "serde"
-version = "1.0.126"
+version = "1.0.127"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec7505abeacaec74ae4778d9d9328fe5a5d04253220a85c4ee022239fc996d03"
+checksum = "f03b9878abf6d14e6779d3f24f07b2cfa90352cfec4acc5aab8f1ac7f146fae8"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.126"
+version = "1.0.127"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "963a7dbc9895aeac7ac90e74f34a5d5261828f79df35cbed41e10189d3804d43"
+checksum = "a024926d3432516606328597e0f224a51355a493b49fdd67e9209187cbe55ecc"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1235,9 +1235,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.65"
+version = "1.0.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28c5e91e4240b46c4c19219d6cc84784444326131a4210f496f948d5cc827a29"
+checksum = "336b10da19a12ad094b59d870ebde26a45402e5b470add4b5fd03c5048a32127"
 dependencies = [
  "itoa",
  "ryu",
