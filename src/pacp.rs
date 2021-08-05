@@ -8,13 +8,23 @@ use serde::Deserialize;
 use serde_json;
 use thiserror::Error;
 
-#[derive(Deserialize, Debug, Default)]
+#[derive(Deserialize, Debug)]
 struct PACPropertiesIntermediate {
     #[serde(rename = "pac")]
     pub name: Option<String>,
     #[serde(rename = "pac_features")]
     pub features: Option<Vec<String>>,
     pub interrupt_path: Option<String>,
+}
+
+impl Default for PACPropertiesIntermediate {
+    fn default() -> Self {
+        Self {
+            name: None,
+            features: None,
+            interrupt_path: None,
+        }
+    }
 }
 
 impl PACPropertiesIntermediate {

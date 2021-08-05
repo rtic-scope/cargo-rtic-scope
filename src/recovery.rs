@@ -14,7 +14,7 @@ use itm_decode::{ExceptionAction, TimestampedTracePackets, TracePacket};
 use libloading;
 use proc_macro2::{Ident, TokenStream, TokenTree};
 use quote::{format_ident, quote};
-use rtic_scope_api::{EventChunk, EventType, TaskAction};
+use rtic_scope_api::{self as api, EventChunk, EventType, TaskAction};
 use rtic_syntax;
 use serde::{Deserialize, Serialize};
 use syn;
@@ -62,16 +62,25 @@ impl Metadata {
         self.comment.clone().unwrap_or("".to_string())
     }
 
-    pub fn resolve_event_chunk(&self, packets: TimestampedTracePackets) -> Result<EventChunk> {
-        let timestamp = || -> Result<chrono::DateTime<Local>> {
-            // TODO handle all fields
-            let itm_decode::Timestamp { base, delta, .. } = packets.timestamp;
-            let seconds_since =
-                (base.unwrap_or(0) + delta.context("delta missing")?) as f64 / self.freq as f64;
+    pub fn build_event_chunk(&self, packets: TimestampedTracePackets) -> Result<EventChunk> {
+        let timestamp = {
+            let itm_decode::Timestamp {
+                base,
+                delta,
+                data_relation,
+                diverged,
+            } = packets.timestamp;
+            let seconds_since = (base.unwrap_or(0) + delta.expect("timestamp delta is None"))
+                as f64
+                / self.freq as f64;
             let since = chrono::Duration::nanoseconds((seconds_since * 1e9).round() as i64);
-            Ok(self.timestamp + since)
-        }()
-        .context("Failed to resolve absolute timestamp")?;
+
+            api::Timestamp {
+                ts: self.timestamp + since,
+                data_relation,
+                diverged,
+            }
+        };
 
         let resolve_exception = |&excpt| -> Result<String> {
             use itm_decode::cortex_m::VectActive;

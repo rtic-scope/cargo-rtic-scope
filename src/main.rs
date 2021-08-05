@@ -26,6 +26,8 @@ mod sources;
 
 use build::CargoWrapper;
 
+pub type TraceData = Result<itm_decode::TimestampedTracePackets, itm_decode::MalformedPacket>;
+
 #[derive(Debug, StructOpt)]
 struct Opts {
     /// The frontend to forward recorded/replayed trace to.
@@ -297,10 +299,17 @@ fn main() -> Result<()> {
         sinks.drain(..).map(|s| (s, false)).collect();
     let mut retstatus = Ok(());
     let mut buffer_warning = false;
-    while let Some(packets) = source.next() {
+    while let Some(data) = source.next() {
         if halt.load(Ordering::SeqCst) {
             break;
         }
+
+        let data = data.with_context(|| {
+            format!(
+                "Failed to read trace data from source {}",
+                source.describe()
+            )
+        })?;
 
         // Eventually warn about the source input buffer overflowing,
         // but only once.
@@ -314,16 +323,16 @@ fn main() -> Result<()> {
             }
         }
 
-        let packets = match packets {
-            Ok(packets) => packets,
-            Err(e) => {
-                retstatus = Err(e.context("Failed to read trace packets from source"));
-                break;
-            }
-        };
+        if let Err(ref malformed) = data {
+            eprintln!(
+                "{}: failed to decode an ITM packet: {:?}",
+                "warning".yellow().bold(),
+                malformed, // TODO thiserror
+            );
+        }
 
         for (sink, is_broken) in sinks.iter_mut() {
-            if let Err(e) = sink.drain(packets.clone()) {
+            if let Err(e) = sink.drain(data.clone()) {
                 eprintln!(
                     "Failed to drain trace packets to {}: {:?}",
                     sink.describe(),

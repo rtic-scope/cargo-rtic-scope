@@ -1,5 +1,6 @@
 use crate::recovery::{Metadata, TaskResolveMaps};
 use crate::sinks::Sink;
+use crate::TraceData;
 use std::fs;
 
 use std::io::Write;
@@ -9,7 +10,6 @@ use anyhow::{bail, Context, Result};
 use cargo_metadata::Artifact;
 use chrono::prelude::*;
 use git2::{DescribeFormatOptions, DescribeOptions, Repository};
-use itm_decode::TimestampedTracePackets;
 use serde_json;
 
 const TRACE_FILE_EXT: &'static str = ".trace";
@@ -86,8 +86,8 @@ impl FileSink {
 }
 
 impl Sink for FileSink {
-    fn drain(&mut self, packets: TimestampedTracePackets) -> Result<()> {
-        let json = serde_json::to_string(&packets)?;
+    fn drain(&mut self, data: TraceData) -> Result<()> {
+        let json = serde_json::to_string(&data)?;
         self.file.write_all(json.as_bytes())?;
 
         Ok(())

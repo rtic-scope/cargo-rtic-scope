@@ -1,5 +1,6 @@
+use crate::TraceData;
+
 use anyhow::Result;
-use itm_decode::TimestampedTracePackets;
 
 #[derive(Debug)]
 pub enum BufferStatus {
@@ -15,7 +16,7 @@ pub enum BufferStatus {
     NotApplicable,
 }
 
-pub trait Source: Iterator<Item = Result<TimestampedTracePackets>> {
+pub trait Source: Iterator<Item = Result<TraceData>> {
     fn reset_target(&mut self) -> Result<()>;
 
     /// Reports the available bytes in the input buffer, if able.

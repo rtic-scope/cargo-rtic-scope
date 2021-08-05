@@ -1,11 +1,11 @@
 use crate::recovery::Metadata;
 use crate::sources::{BufferStatus, Source};
+use crate::TraceData;
 
 use std::fs;
 use std::io::BufReader;
 
-use anyhow::{bail, Context, Result};
-use itm_decode::TimestampedTracePackets;
+use anyhow::{anyhow, bail, Result};
 use serde_json;
 
 /// Something data is deserialized from. Always a file.
@@ -36,14 +36,14 @@ impl FileSource {
 }
 
 impl Iterator for FileSource {
-    type Item = Result<TimestampedTracePackets>;
+    type Item = Result<TraceData>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut stream = serde_json::Deserializer::from_reader(&mut self.reader)
-            .into_iter::<TimestampedTracePackets>();
+        let mut stream =
+            serde_json::Deserializer::from_reader(&mut self.reader).into_iter::<TraceData>();
         match stream.next() {
-            Some(Ok(packets)) => Some(Ok(packets)),
-            Some(e) => Some(e.context("Failed to deserialize packet from trace file")),
+            Some(Ok(data)) => Some(Ok(data)),
+            Some(Err(e)) => Some(Err(anyhow!("Failed to deserialize data: {:?}", e))),
             None => None,
         }
     }

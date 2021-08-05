@@ -1,8 +1,9 @@
 use crate::sources::Source;
 use crate::TPIUOptions;
+use crate::TraceData;
 
 use anyhow::{anyhow, Context, Result};
-use itm_decode::{Decoder, DecoderState, TimestampedTracePackets};
+use itm_decode::{Decoder, DecoderOptions};
 use probe_rs::{architecture::arm::SwoConfig, Session};
 
 pub struct ProbeSource {
@@ -31,29 +32,31 @@ impl ProbeSource {
 
         Ok(Self {
             session,
-            decoder: Decoder::new(),
+            decoder: Decoder::new(DecoderOptions::default()),
         })
     }
 }
 
 impl Iterator for ProbeSource {
-    type Item = Result<TimestampedTracePackets>;
+    type Item = Result<TraceData>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Ok(bytes) = self.session.read_swo() {
-            self.decoder.push(bytes);
+        // XXX we can get stuck here if read_swo returns data such that
+        // the Ok(None) is always pulled from the decoder.
+        loop {
+            match self.session.read_swo() {
+                Ok(bytes) => {
+                    self.decoder.push(&bytes);
 
-            match self.decoder.pull_with_timestamp() {
-                Ok(None) => continue,
-                Ok(Some(packets)) => return Some(Ok(packets)),
-                Err(e) => {
-                    self.decoder.state = DecoderState::Header;
-                    return Some(Err(anyhow!("Failed to decode packets from probe: {:?}", e)));
+                    match self.decoder.pull_with_timestamp() {
+                        Ok(None) => continue,
+                        Ok(Some(packets)) => return Some(Ok(Ok(packets))),
+                        Err(malformed) => return Some(Ok(Err(malformed))),
+                    }
                 }
+                Err(e) => return Some(Err(anyhow!("Failed to read SWO bytes: {:?}", e))),
             }
         }
-
-        None
     }
 }
 

@@ -1,11 +1,12 @@
 use crate::sources::{BufferStatus, Source};
+use crate::TraceData;
 
 use std::fs;
 use std::io::Read;
 use std::os::unix::io::{AsRawFd, RawFd};
 
 use anyhow::{anyhow, Context, Result};
-use itm_decode::{Decoder, DecoderState, TimestampedTracePackets};
+use itm_decode::{Decoder, DecoderOptions};
 use nix::{
     fcntl::{self, FcntlArg, OFlag},
     libc,
@@ -174,37 +175,26 @@ impl TTYSource {
         Self {
             fd: device.as_raw_fd(),
             bytes: device.bytes(),
-            decoder: Decoder::new(),
+            decoder: Decoder::new(DecoderOptions::default()),
             session,
         }
     }
 }
 
 impl Iterator for TTYSource {
-    type Item = Result<TimestampedTracePackets>;
+    type Item = Result<TraceData>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(b) = self.bytes.next() {
             match b {
-                Ok(b) => self.decoder.push([b].to_vec()),
-                Err(e) => {
-                    return Some(Err(anyhow!(
-                        "Failed to read byte from serial device: {:?}",
-                        e
-                    )))
-                }
+                Ok(b) => self.decoder.push(&[b]),
+                Err(e) => return Some(Err(anyhow!("Failed to read byte: {:?}", e))),
             };
 
             match self.decoder.pull_with_timestamp() {
                 Ok(None) => continue,
-                Ok(Some(packets)) => return Some(Ok(packets)),
-                Err(e) => {
-                    self.decoder.state = DecoderState::Header;
-                    return Some(Err(anyhow!(
-                        "Failed to decode packets from serial: {:?}",
-                        e
-                    )));
-                }
+                Ok(Some(packets)) => return Some(Ok(Ok(packets))),
+                Err(malformed) => return Some(Ok(Err(malformed))),
             }
         }
 
