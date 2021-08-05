@@ -106,8 +106,11 @@ struct ReplayOptions {
     #[structopt(name = "list", long = "list", short = "l")]
     list: bool,
 
-    #[structopt(required_unless("list"))]
+    #[structopt(required_unless_one(&["list", "raw-file"]))]
     index: Option<usize>,
+
+    #[structopt(flatten)]
+    raw_options: RawFileOptions,
 
     /// Directory where previously recorded trace streams. By default,
     /// the build cache of <bin> is used (usually ./target/).
@@ -116,6 +119,21 @@ struct ReplayOptions {
 
     #[structopt(flatten)]
     cargo_options: CargoOptions,
+}
+
+#[derive(StructOpt, Debug)]
+struct RawFileOptions {
+    /// Path to the file containing raw trace data that should be
+    /// replayed.
+    #[structopt(name = "raw-file", long = "raw-file", requires("virtual-freq"))]
+    file: Option<PathBuf>,
+
+    #[structopt(name = "virtual-freq", long = "tpiu-freq", hidden = true)]
+    freq: u32,
+    #[structopt(long = "comment", short = "c", hidden = true)]
+    comment: Option<String>,
+    #[structopt(flatten)]
+    pac: PACOptions,
 }
 
 #[derive(StructOpt, Debug)]
@@ -184,7 +202,7 @@ fn main() -> Result<()> {
             None => return Ok(()),
         },
         Command::Replay(ref opts) => {
-            match replay(opts, &cargo).with_context(|| {
+            match replay(opts, &cargo, &artifact).with_context(|| {
                 format!("Failed to {}", {
                     if opts.list {
                         "index traces"
@@ -353,6 +371,25 @@ type TraceTuple = (
     recovery::Metadata,
 );
 
+fn resolve_maps(
+    cargo: &CargoWrapper,
+    pac: &PACOptions,
+    artifact: &Artifact,
+) -> Result<recovery::TaskResolveMaps> {
+    // Find crate name, features and path to interrupt enum from
+    // manifest metadata, or override options.
+    let pacp = pacp::PACProperties::new(cargo, pac)
+        .context("Failed to complete PAC propeties from manifest metadata")?;
+
+    // Map IRQ numbers and DWT matches to their respective RTIC tasks
+    let maps = recovery::TaskResolver::new(artifact, cargo, pacp)
+        .context("Failed to parse RTIC application source file")?
+        .resolve()
+        .context("Failed to resolve tasks")?;
+
+    Ok(maps)
+}
+
 fn trace(
     opts: &TraceOptions,
     cargo: &CargoWrapper,
@@ -374,16 +411,7 @@ fn trace(
     )
     .context("Failed to generate trace sink file")?;
 
-    // Find crate name, features and path to interrupt enum from
-    // manifest metadata, or override options.
-    let pacp = pacp::PACProperties::new(&cargo, &opts.pac)
-        .context("Failed to complete PAC propeties from manifest metadata")?;
-
-    // Map IRQ numbers and DWT matches to their respective RTIC tasks
-    let maps = recovery::TaskResolver::new(&artifact, &cargo, pacp)
-        .context("Failed to parse RTIC application source file")?
-        .resolve()
-        .context("Failed to resolve tasks")?;
+    let maps = resolve_maps(cargo, &opts.pac, artifact)?;
 
     // Flash binary to target
     let elf = artifact.executable.as_ref().unwrap();
@@ -417,36 +445,68 @@ fn trace(
     Ok(Some((trace_source, vec![Box::new(trace_sink)], metadata)))
 }
 
-fn replay(opts: &ReplayOptions, cargo: &CargoWrapper) -> Result<Option<TraceTuple>> {
-    let mut traces = sinks::file::find_trace_files({
-        if let Some(ref dir) = opts.trace_dir {
-            dir.to_path_buf()
-        } else {
-            cargo.target_dir().join("rtic-traces")
-        }
-    })?;
-
-    if opts.list {
-        for (i, trace) in traces.enumerate() {
+fn replay(
+    opts: &ReplayOptions,
+    cargo: &CargoWrapper,
+    artifact: &Artifact,
+) -> Result<Option<TraceTuple>> {
+    match opts {
+        ReplayOptions {
+            raw_options:
+                RawFileOptions {
+                    file: Some(file),
+                    freq,
+                    comment,
+                    pac,
+                },
+            ..
+        } => {
+            let src = sources::RawFileSource::new(fs::OpenOptions::new().read(true).open(file)?);
+            let maps = resolve_maps(cargo, pac, artifact)?;
             let metadata =
-                sources::FileSource::new(fs::OpenOptions::new().read(true).open(&trace)?)?
-                    .metadata();
-            println!("{}\t{}\t{}", i, trace.display(), metadata.comment());
+                recovery::Metadata::new(maps, chrono::Local::now(), *freq, comment.clone());
+
+            Ok(Some((Box::new(src), vec![], metadata)))
         }
+        ReplayOptions {
+            list: true,
+            trace_dir,
+            ..
+        } => {
+            let traces = sinks::file::find_trace_files(
+                trace_dir
+                    .clone()
+                    .unwrap_or(cargo.target_dir().join("rtic-traces")),
+            )?;
+            for (i, trace) in traces.enumerate() {
+                let metadata =
+                    sources::FileSource::new(fs::OpenOptions::new().read(true).open(&trace)?)?
+                        .metadata();
+                println!("{}\t{}\t{}", i, trace.display(), metadata.comment());
+            }
 
-        return Ok(None);
-    } else if let Some(idx) = opts.index {
-        let trace = traces
-            .nth(idx)
-            .with_context(|| format!("No trace with index {}", idx))?;
-        eprintln!("Replaying {}", trace.display());
+            return Ok(None);
+        }
+        ReplayOptions {
+            index: Some(idx),
+            trace_dir,
+            ..
+        } => {
+            let mut traces = sinks::file::find_trace_files(
+                trace_dir
+                    .clone()
+                    .unwrap_or(cargo.target_dir().join("rtic-traces")),
+            )?;
+            let trace = traces
+                .nth(*idx)
+                .with_context(|| format!("No trace with index {}", *idx))?;
 
-        // open trace file and print packets (for now)
-        let src = sources::FileSource::new(fs::OpenOptions::new().read(true).open(&trace)?)?;
-        let metadata = src.metadata();
+            // open trace file and print packets
+            let src = sources::FileSource::new(fs::OpenOptions::new().read(true).open(&trace)?)?;
+            let metadata = src.metadata();
 
-        return Ok(Some((Box::new(src), vec![], metadata)));
+            Ok(Some((Box::new(src), vec![], metadata)))
+        }
+        _ => unreachable!(),
     }
-
-    unreachable!();
 }

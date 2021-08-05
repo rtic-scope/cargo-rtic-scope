@@ -50,11 +50,6 @@ impl Iterator for FileSource {
 }
 
 impl Source for FileSource {
-    fn reset_target(&mut self) -> Result<()> {
-        // not connected to a target
-        Ok(())
-    }
-
     fn avail_buffer(&self) -> BufferStatus {
         BufferStatus::NotApplicable
     }

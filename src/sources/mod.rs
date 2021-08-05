@@ -17,7 +17,9 @@ pub enum BufferStatus {
 }
 
 pub trait Source: Iterator<Item = Result<TraceData>> {
-    fn reset_target(&mut self) -> Result<()>;
+    fn reset_target(&mut self) -> Result<()> {
+        Ok(())
+    }
 
     /// Reports the available bytes in the input buffer, if able.
     fn avail_buffer(&self) -> BufferStatus {
@@ -35,3 +37,6 @@ pub use tty::TTYSource;
 
 mod probe;
 pub use probe::ProbeSource;
+
+mod raw_file;
+pub use raw_file::RawFileSource;
