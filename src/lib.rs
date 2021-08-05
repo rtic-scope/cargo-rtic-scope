@@ -5,18 +5,34 @@ use serde::{Deserialize, Serialize};
 
 #[allow(unused_imports)]
 use itm_decode::ExceptionAction;
-#[allow(unused_imports)]
-use itm_decode::TracePacket;
 
-type Timestamp = chrono::DateTime<Local>;
+use itm_decode::{TracePacket, MalformedPacket, TimestampDataRelation};
 
-/// A set of events that occurred at a certain timepoint after target
-/// reset.
+/// Derivative of [itm_decode::Timestamp]; an absolute timestamp `ts`
+/// replaces `base` and `delta`.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Timestamp {
+    /// Absolute timestamp value
+    pub ts: chrono::DateTime<Local>,
+
+    /// In what manner this timestamp relate to the associated data
+    /// packets, if known.
+    pub data_relation: Option<TimestampDataRelation>,
+
+    /// An overflow packet was recieved, which may have been caused by a
+    /// local timestamp counter overflow. See
+    /// [itm_decode::Timestamp::diverged].
+    pub diverged: bool,
+}
+
+/// A set of events that occurred at a certain timepoint during target
+/// execution.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct EventChunk {
     /// Collective timestamp for the chunk of [EventChunk::events].
     pub timestamp: Timestamp,
 
+    /// Set of events that occured during [EventChunk::timestamp].
     pub events: Vec<EventType>,
 }
 
@@ -33,23 +49,29 @@ pub enum TaskAction {
     Returned,
 }
 
-/// Derivative subset of [TracePacket], where RTIC task information has
+/// Derivative of [TracePacket], where RTIC task information has
 /// been resolved.
 #[derive(Serialize, Deserialize, Debug)]
 pub enum EventType {
-    /// [TracePacket::Overflow] equivalent.
+    /// Equivalent to [TracePacket::Overflow].
     Overflow,
 
-    /// An RTIC task performed an action.
+    /// An RTIC task performed an action. Either a software or a
+    /// hardware task.
     Task {
         /// What RTIC task did something?
+
+        /// Name of the RTIC task that did something. For example,
+        /// `"app::some_task"`.
         name: String,
 
-        /// What did the RTIC task do?
+        /// What did the task do?
         action: TaskAction,
     },
 
-    /// Target emitted packages for which no RTIC information could be
+    /// Target emitted package for which no RTIC information could be
     /// associated.
-    Unknown(TracePacket)
+    Unknown(TracePacket),
+
+    Invalid(MalformedPacket),
 }
