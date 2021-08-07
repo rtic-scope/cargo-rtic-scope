@@ -1,9 +1,9 @@
 use crate::build::CargoWrapper;
+use crate::diag;
 use crate::PACOptions;
 
 use std::convert::TryInto;
 
-use anyhow::Result;
 use serde::Deserialize;
 use serde_json;
 use thiserror::Error;
@@ -52,12 +52,22 @@ pub struct PACProperties {
 
 #[derive(Error, Debug)]
 pub enum PACMetadataError {
-    #[error("Manifest metadata table could not be read")]
-    DeserializationFailed,
+    #[error("Manifest metadata table could not be read: {0:?}")]
+    DeserializationFailed(#[from] serde_json::Error),
     #[error("Manifest metadata is missing PAC name")]
     MissingName,
     #[error("Manifest metadata is missing PAC interrupt path")]
     MissingInterruptPath,
+}
+
+impl diag::DiagnosableError for PACMetadataError {
+    fn diagnose(&self) -> Vec<String> {
+        match self {
+            Self::MissingName => vec!["Add `name = \"your PAC name\"` to [package.metadata.rtic-scope] in Cargo.toml".into()],
+            Self::MissingInterruptPath => vec!["Add `interrupt_path = \"path to your PAC's Interrupt enum\"` to [package.metadata.rtic-scope] in Cargo.toml".into()],
+            _ => vec![],
+        }
+    }
 }
 
 impl TryInto<PACProperties> for PACPropertiesIntermediate {
@@ -79,21 +89,21 @@ impl PACProperties {
         let package_meta = cargo.package().unwrap().metadata.get("rtic-scope");
         let workspace_meta = cargo.metadata().workspace_metadata.get("rtic-scope");
 
+        let deser = |v: serde_json::Value| {
+            serde_json::from_value(v).map_err(|e| PACMetadataError::DeserializationFailed(e))
+        };
+
         // Read from cargo manifest
         let mut int = match (package_meta, workspace_meta) {
             (Some(pkg), Some(wrk)) => {
-                let mut pkg: PACPropertiesIntermediate = serde_json::from_value(pkg.to_owned())
-                    .map_err(|_| PACMetadataError::DeserializationFailed)?;
-                let wrk: PACPropertiesIntermediate = serde_json::from_value(wrk.to_owned())
-                    .map_err(|_| PACMetadataError::DeserializationFailed)?;
+                let mut pkg: PACPropertiesIntermediate = deser(pkg.to_owned())?;
+                let wrk: PACPropertiesIntermediate = deser(wrk.to_owned())?;
 
                 pkg.complete_with(wrk);
                 pkg
             }
-            (Some(pkg), None) => serde_json::from_value(pkg.to_owned())
-                .map_err(|_| PACMetadataError::DeserializationFailed)?,
-            (None, Some(wrk)) => serde_json::from_value(wrk.to_owned())
-                .map_err(|_| PACMetadataError::DeserializationFailed)?,
+            (Some(pkg), None) => deser(pkg.to_owned())?,
+            (None, Some(wrk)) => deser(wrk.to_owned())?,
             _ => PACPropertiesIntermediate::default(),
         };
 

@@ -18,6 +18,7 @@ use probe_rs_cli_util::{
 use structopt::StructOpt;
 
 mod build;
+mod diag;
 mod pacp;
 mod recovery;
 mod sinks;
