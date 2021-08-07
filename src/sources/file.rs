@@ -1,11 +1,10 @@
 use crate::recovery::Metadata;
-use crate::sources::{BufferStatus, Source};
+use crate::sources::{BufferStatus, Source, SourceError};
 use crate::TraceData;
 
 use std::fs;
 use std::io::BufReader;
 
-use anyhow::{anyhow, bail, Result};
 use serde_json;
 
 /// Something data is deserialized from. Always a file.
@@ -15,7 +14,7 @@ pub struct FileSource {
 }
 
 impl FileSource {
-    pub fn new(fd: fs::File) -> Result<Self> {
+    pub fn new(fd: fs::File) -> Result<Self, SourceError> {
         let mut reader = BufReader::new(fd);
         let metadata = {
             let mut stream =
@@ -23,7 +22,9 @@ impl FileSource {
             if let Some(Ok(metadata)) = stream.next() {
                 metadata
             } else {
-                bail!("Failed to deserialize metadata header");
+                return Err(SourceError::SetupError(
+                    "Failed to deserialize metadata header".to_string(),
+                ));
             }
         };
 
@@ -36,14 +37,14 @@ impl FileSource {
 }
 
 impl Iterator for FileSource {
-    type Item = Result<TraceData>;
+    type Item = Result<TraceData, SourceError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut stream =
             serde_json::Deserializer::from_reader(&mut self.reader).into_iter::<TraceData>();
         match stream.next() {
             Some(Ok(data)) => Some(Ok(data)),
-            Some(Err(e)) => Some(Err(anyhow!("Failed to deserialize data: {:?}", e))),
+            Some(Err(e)) => Some(Err(SourceError::IterDeserError(e))),
             None => None,
         }
     }

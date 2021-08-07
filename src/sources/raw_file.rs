@@ -1,10 +1,9 @@
-use crate::sources::{BufferStatus, Source};
+use crate::sources::{BufferStatus, Source, SourceError};
 use crate::TraceData;
 
 use std::fs;
 use std::io::Read;
 
-use anyhow::{anyhow, Result};
 use itm_decode::{Decoder, DecoderOptions};
 
 /// Something data is deserialized from. Always a file.
@@ -25,13 +24,13 @@ impl RawFileSource {
 }
 
 impl Iterator for RawFileSource {
-    type Item = Result<TraceData>;
+    type Item = Result<TraceData, SourceError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(b) = self.bytes.next() {
             match b {
                 Ok(b) => self.decoder.push(&[b]),
-                Err(e) => return Some(Err(anyhow!("Failed to read byte: {:?}", e))),
+                Err(e) => return Some(Err(SourceError::IterIOError(e))),
             };
 
             match self.decoder.pull_with_timestamp() {

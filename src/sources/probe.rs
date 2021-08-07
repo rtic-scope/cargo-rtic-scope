@@ -1,8 +1,7 @@
-use crate::sources::Source;
+use crate::sources::{Source, SourceError};
 use crate::TPIUOptions;
 use crate::TraceData;
 
-use anyhow::{anyhow, Context, Result};
 use itm_decode::{Decoder, DecoderOptions};
 use probe_rs::{architecture::arm::SwoConfig, Session};
 
@@ -12,7 +11,7 @@ pub struct ProbeSource {
 }
 
 impl ProbeSource {
-    pub fn new(mut session: Session, opts: &TPIUOptions) -> Result<Self> {
+    pub fn new(mut session: Session, opts: &TPIUOptions) -> Result<Self, SourceError> {
         // Configure probe and target for tracing
         //
         // NOTE(unwrap) --tpiu-freq is a requirement to enter this
@@ -20,7 +19,9 @@ impl ProbeSource {
         let cfg = SwoConfig::new(opts.clk_freq)
             .set_baud(opts.baud_rate)
             .set_continuous_formatting(false);
-        session.setup_swv(0, &cfg)?;
+        session
+            .setup_swv(0, &cfg)
+            .map_err(|e| SourceError::SetupProbeError(e))?;
 
         // Enable exception tracing
         // {
@@ -38,7 +39,7 @@ impl ProbeSource {
 }
 
 impl Iterator for ProbeSource {
-    type Item = Result<TraceData>;
+    type Item = Result<TraceData, SourceError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // XXX we can get stuck here if read_swo returns data such that
@@ -54,16 +55,19 @@ impl Iterator for ProbeSource {
                         Err(malformed) => return Some(Ok(Err(malformed))),
                     }
                 }
-                Err(e) => return Some(Err(anyhow!("Failed to read SWO bytes: {:?}", e))),
+                Err(e) => return Some(Err(SourceError::IterProbeError(e))),
             }
         }
     }
 }
 
 impl Source for ProbeSource {
-    fn reset_target(&mut self) -> Result<()> {
-        let mut core = self.session.core(0)?;
-        core.reset().context("Unable to reset target")?;
+    fn reset_target(&mut self) -> Result<(), SourceError> {
+        let mut core = self
+            .session
+            .core(0)
+            .map_err(|e| SourceError::ResetError(e))?;
+        core.reset().map_err(|e| SourceError::ResetError(e))?;
 
         Ok(())
     }

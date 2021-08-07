@@ -1,11 +1,10 @@
-use crate::sources::{BufferStatus, Source};
+use crate::sources::{BufferStatus, Source, SourceError};
 use crate::TraceData;
 
 use std::fs;
 use std::io::Read;
 use std::os::unix::io::{AsRawFd, RawFd};
 
-use anyhow::{anyhow, Context, Result};
 use itm_decode::{Decoder, DecoderOptions};
 use nix::{
     fcntl::{self, FcntlArg, OFlag},
@@ -39,21 +38,29 @@ mod ioctl {
 ///
 /// TODO ensure POSIX compliance, see termios(3)
 /// TODO We are currently using line disciple 0. Is that correct?
-pub fn configure(device: &String) -> Result<fs::File> {
+pub fn configure(device: &String) -> Result<fs::File, SourceError> {
     let file = fs::OpenOptions::new()
         .read(true)
         .open(&device)
-        .with_context(|| format!("Unable to open {}", device))?;
+        .map_err(|e| SourceError::SetupIOError(e))?;
 
     unsafe {
         let fd = file.as_raw_fd();
 
         // Enable exclusive mode. Any further open(2) will fail with EBUSY.
-        ioctl::tiocexcl(fd)
-            .with_context(|| format!("Failed to put {} into exclusive mode", device))?;
+        ioctl::tiocexcl(fd).map_err(|e| {
+            SourceError::SetupError(format!(
+                "Failed to put {} into exclusive mode: tiocexcl = {}",
+                device, e
+            ))
+        })?;
 
-        let mut settings = termios::tcgetattr(fd)
-            .with_context(|| format!("Failed to read terminal settings of {}", device))?;
+        let mut settings = termios::tcgetattr(fd).map_err(|e| {
+            SourceError::SetupError(format!(
+                "Failed to read terminal settings of {}: tcgetattr = {}",
+                device, e
+            ))
+        })?;
 
         settings.input_flags |= InputFlags::BRKINT | InputFlags::IGNPAR | InputFlags::IXON;
         settings.input_flags &= !(InputFlags::ICRNL
@@ -134,30 +141,51 @@ pub fn configure(device: &String) -> Result<fs::File> {
             | LocalFlags::PENDIN
             | LocalFlags::NOFLSH);
 
-        termios::cfsetspeed(&mut settings, BaudRate::B115200)
-            .context("Failed to configure terminal baud rate")?;
+        termios::cfsetspeed(&mut settings, BaudRate::B115200).map_err(|e| {
+            SourceError::SetupError(format!(
+                "Failed to configure {} baud rate: cfsetspeed = {}",
+                device, e
+            ))
+        })?;
 
         settings.control_chars[CC::VTIME as usize] = 2;
         settings.control_chars[CC::VMIN as usize] = 100;
 
         // Drain all output, flush all input, and apply settings.
-        termios::tcsetattr(fd, SetArg::TCSAFLUSH, &settings)
-            .with_context(|| format!("Failed to apply terminal settings to {}", device))?;
+        termios::tcsetattr(fd, SetArg::TCSAFLUSH, &settings).map_err(|e| {
+            SourceError::SetupError(format!(
+                "Failed to apply terminal settings to {}: tcsetattr = {}",
+                device, e
+            ))
+        })?;
 
         let mut flags: libc::c_int = 0;
-        ioctl::tiocmget(fd, &mut flags)
-            .with_context(|| format!("Failed to read modem bits of {}", device))?;
+        ioctl::tiocmget(fd, &mut flags).map_err(|e| {
+            SourceError::SetupError(format!(
+                "Failed to read modem bits of {}: tiocmget = {}",
+                device, e
+            ))
+        })?;
         flags |= libc::TIOCM_DTR | libc::TIOCM_RTS;
-        ioctl::tiocmset(fd, &flags)
-            .with_context(|| format!("Failed to apply modem bits to {}", device))?;
+        ioctl::tiocmset(fd, &flags).map_err(|e| {
+            SourceError::SetupError(format!(
+                "Failed to apply modem bits to {}: tiocmset = {}",
+                device, e
+            ))
+        })?;
 
         // Make the tty read-only.
-        fcntl::fcntl(fd, FcntlArg::F_SETFL(OFlag::O_RDONLY))
-            .with_context(|| format!("Failed to make {} read-only", device))?;
+        fcntl::fcntl(fd, FcntlArg::F_SETFL(OFlag::O_RDONLY)).map_err(|e| {
+            SourceError::SetupError(format!(
+                "Failed to make {} read-only: fcntl = {}",
+                device, e
+            ))
+        })?;
 
         // Flush all pending I/O, just in case.
-        ioctl::tcflsh(fd, libc::TCIOFLUSH)
-            .with_context(|| format!("Failed to flush I/O of {}", device))?;
+        ioctl::tcflsh(fd, libc::TCIOFLUSH).map_err(|e| {
+            SourceError::SetupError(format!("Failed to flush I/O of {}: tcflsh = {}", device, e))
+        })?;
     }
 
     Ok(file)
@@ -182,13 +210,13 @@ impl TTYSource {
 }
 
 impl Iterator for TTYSource {
-    type Item = Result<TraceData>;
+    type Item = Result<TraceData, SourceError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(b) = self.bytes.next() {
             match b {
                 Ok(b) => self.decoder.push(&[b]),
-                Err(e) => return Some(Err(anyhow!("Failed to read byte: {:?}", e))),
+                Err(e) => return Some(Err(SourceError::IterIOError(e))),
             };
 
             match self.decoder.pull_with_timestamp() {
@@ -203,9 +231,12 @@ impl Iterator for TTYSource {
 }
 
 impl Source for TTYSource {
-    fn reset_target(&mut self) -> Result<()> {
-        let mut core = self.session.core(0)?;
-        core.reset().context("Unable to reset target")?;
+    fn reset_target(&mut self) -> Result<(), SourceError> {
+        let mut core = self
+            .session
+            .core(0)
+            .map_err(|e| SourceError::ResetError(e))?;
+        core.reset().map_err(|e| SourceError::ResetError(e))?;
 
         Ok(())
     }

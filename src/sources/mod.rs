@@ -1,6 +1,7 @@
+use crate::diag;
 use crate::TraceData;
 
-use anyhow::Result;
+use thiserror::Error;
 
 #[derive(Debug)]
 pub enum BufferStatus {
@@ -16,8 +17,28 @@ pub enum BufferStatus {
     NotApplicable,
 }
 
-pub trait Source: Iterator<Item = Result<TraceData>> {
-    fn reset_target(&mut self) -> Result<()> {
+#[derive(Debug, Error)]
+pub enum SourceError {
+    #[error("Failed to setup source: {0}")]
+    SetupError(String),
+    #[error("Failed to setup source during I/O: {0}")]
+    SetupIOError(#[source] std::io::Error),
+    #[error("Failed to setup source probe: {0}")]
+    SetupProbeError(#[source] probe_rs::Error),
+    #[error("Failed to deserialize trace data from source: {0}")]
+    IterDeserError(#[from] serde_json::Error),
+    #[error("Failed to read trace data from file: {0}")]
+    IterIOError(#[source] std::io::Error),
+    #[error("Failed to read trace data from probe: {0}")]
+    IterProbeError(#[source] probe_rs::Error),
+    #[error("Failed to reset target device: {0}")]
+    ResetError(#[source] probe_rs::Error),
+}
+
+impl diag::DiagnosableError for SourceError {}
+
+pub trait Source: Iterator<Item = Result<TraceData, SourceError>> {
+    fn reset_target(&mut self) -> Result<(), SourceError> {
         Ok(())
     }
 
