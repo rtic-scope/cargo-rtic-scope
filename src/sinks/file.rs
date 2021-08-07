@@ -1,12 +1,11 @@
 use crate::recovery::{Metadata, TaskResolveMaps};
-use crate::sinks::Sink;
+use crate::sinks::{Sink, SinkError};
 use crate::TraceData;
 use std::fs;
 
 use std::io::Write;
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
 use cargo_metadata::Artifact;
 use chrono::prelude::*;
 use git2::{DescribeFormatOptions, DescribeOptions, Repository};
@@ -23,11 +22,16 @@ impl FileSink {
         artifact: &Artifact,
         trace_dir: &PathBuf,
         remove_prev_traces: bool,
-    ) -> Result<Self> {
+    ) -> Result<Self, SinkError> {
         if remove_prev_traces {
             if let Ok(traces) = find_trace_files(trace_dir.to_path_buf()) {
                 for trace in traces {
-                    fs::remove_file(trace).context("Failed to remove previous trace file")?;
+                    fs::remove_file(trace).map_err(|e| {
+                        SinkError::SetupIOError(
+                            Some("Failed to remove previous trace file".to_string()),
+                            e,
+                        )
+                    })?;
                 }
             }
         }
@@ -36,7 +40,8 @@ impl FileSink {
         // "blinky-gbaadf00-dirty-2021-06-16T17:13:16.trace"
         let repo = find_git_repo(artifact.target.src_path.clone())?;
         let git_shortdesc = repo
-            .describe(&DescribeOptions::new().show_commit_oid_as_fallback(true))?
+            .describe(&DescribeOptions::new().show_commit_oid_as_fallback(true))
+            .map_err(|e| SinkError::GitError(e))?
             .format(Some(
                 &DescribeFormatOptions::new()
                     .abbreviated_size(7)
@@ -48,11 +53,28 @@ impl FileSink {
             artifact.target.name, git_shortdesc, date, TRACE_FILE_EXT,
         ));
 
-        fs::create_dir_all(trace_dir)?;
+        fs::create_dir_all(trace_dir).map_err(|e| {
+            SinkError::SetupIOError(
+                Some(format!(
+                    "Failed to create output trace directory {}",
+                    trace_dir.display()
+                )),
+                e,
+            )
+        })?;
         let file = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(&file)?;
+            .open(&file)
+            .map_err(|e| {
+                SinkError::SetupIOError(
+                    Some(format!(
+                        "Failed to create output trace file {}",
+                        file.display()
+                    )),
+                    e,
+                )
+            })?;
 
         Ok(Self { file })
     }
@@ -64,9 +86,9 @@ impl FileSink {
         maps: TaskResolveMaps,
         comment: Option<String>,
         reset_fun: F,
-    ) -> Result<Metadata>
+    ) -> Result<Metadata, SinkError>
     where
-        F: FnOnce() -> Result<u32>,
+        F: FnOnce() -> Result<u32, crate::sources::SourceError>,
     {
         let ts = Local::now();
         let freq = reset_fun()?;
@@ -76,19 +98,21 @@ impl FileSink {
         // sequence refers to trace packets.
         let metadata = Metadata::new(maps, ts, freq, comment);
         {
-            let json = serde_json::to_string(&metadata)?;
+            let json = serde_json::to_string(&metadata).map_err(|e| SinkError::DrainSerError(e))?;
             self.file.write_all(json.as_bytes())
         }
-        .context("Failed to write metadata do file")?;
+        .map_err(|e| SinkError::DrainIOError(e))?;
 
         Ok(metadata)
     }
 }
 
 impl Sink for FileSink {
-    fn drain(&mut self, data: TraceData) -> Result<()> {
-        let json = serde_json::to_string(&data)?;
-        self.file.write_all(json.as_bytes())?;
+    fn drain(&mut self, data: TraceData) -> Result<(), SinkError> {
+        let json = serde_json::to_string(&data).map_err(|e| SinkError::DrainSerError(e))?;
+        self.file
+            .write_all(json.as_bytes())
+            .map_err(|e| SinkError::DrainIOError(e))?;
 
         Ok(())
     }
@@ -100,7 +124,8 @@ impl Sink for FileSink {
 
 /// Attempts to find a git repository starting from the given path
 /// and walking upwards until / is hit.
-fn find_git_repo(mut path: PathBuf) -> Result<Repository> {
+fn find_git_repo(mut path: PathBuf) -> Result<Repository, SinkError> {
+    let start_path = path.clone();
     loop {
         match Repository::open(&path) {
             Ok(repo) => return Ok(repo),
@@ -109,16 +134,19 @@ fn find_git_repo(mut path: PathBuf) -> Result<Repository> {
                     continue;
                 }
 
-                bail!("Failed to find git repo root");
+                return Err(SinkError::NoGitRoot(start_path));
             }
         }
     }
 }
 
 /// ls `*.trace` in given path.
-pub fn find_trace_files(path: PathBuf) -> Result<impl Iterator<Item = PathBuf>> {
+// TODO move to Source::file?
+pub fn find_trace_files(path: PathBuf) -> Result<impl Iterator<Item = PathBuf>, SinkError> {
     Ok(fs::read_dir(path)
-        .context("Failed to read trace directory")?
+        .map_err(|e| {
+            SinkError::SetupIOError(Some("Failed to read trace directory".to_string()), e)
+        })?
         // we only care about files we can access
         .map(|entry| entry.unwrap())
         // grep *.trace

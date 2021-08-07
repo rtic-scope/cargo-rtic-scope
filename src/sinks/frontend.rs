@@ -1,10 +1,9 @@
 use crate::recovery::Metadata;
-use crate::sinks::Sink;
+use crate::sinks::{Sink, SinkError};
 use crate::TraceData;
 
 use std::io::Write;
 
-use anyhow::{Context, Result};
 use serde_json;
 
 pub struct FrontendSink {
@@ -19,19 +18,22 @@ impl FrontendSink {
 }
 
 impl Sink for FrontendSink {
-    fn drain(&mut self, data: TraceData) -> Result<()> {
+    fn drain(&mut self, data: TraceData) -> Result<(), SinkError> {
         let json = match data {
             Ok(packets) => serde_json::to_string(
                 &self
                     .metadata
                     .build_event_chunk(packets)
-                    .context("Failed to build event chunk")?,
-            ),
-            Err(malformed) => serde_json::to_string(&malformed),
+                    .map_err(|e| SinkError::ResolveError(e))?,
+            )
+            .map_err(|e| SinkError::DrainSerError(e)),
+            Err(malformed) => {
+                serde_json::to_string(&malformed).map_err(|e| SinkError::DrainSerError(e))
+            }
         }?;
         self.socket
             .write_all(json.as_bytes())
-            .context("Failed to drain JSON to frontend")
+            .map_err(|e| SinkError::DrainIOError(e))
     }
 
     fn describe(&self) -> String {
