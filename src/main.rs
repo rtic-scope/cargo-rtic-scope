@@ -96,10 +96,6 @@ pub struct TPIUOptions {
     baud_rate: u32,
 }
 
-impl TPIUOptions {
-    pub const ARGUMENTS: &'static [&'static str] = &["tpiu-freq=", "tpiu-baud="];
-}
-
 /// Replay a previously recorded trace stream for post-mortem analysis.
 #[derive(StructOpt, Debug)]
 struct ReplayOptions {
