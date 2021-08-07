@@ -1,18 +1,61 @@
 //! Handle artifact building using cargo.
+use crate::diag;
 
 use std::env;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use anyhow::{bail, Context, Result};
 use cargo_metadata;
 pub use cargo_metadata::Artifact;
 use cargo_metadata::Message;
+use thiserror::Error;
 
 pub struct CargoWrapper {
     target_dir: Option<PathBuf>,
     app_metadata: Option<cargo_metadata::Metadata>,
+}
+
+#[derive(Debug, Error)]
+pub enum CargoError {
+    #[error("Failed to find Cargo.toml while traversing upwards from {}", .0.display())]
+    CannotFindManifest(PathBuf),
+    #[error("Multiple suitable {0} artifacts were found after `cargo build {}` where one was expected", Self::maybe_opts_to_str(.1))]
+    MultipleSuitableArtifacts(String, Option<Vec<String>>),
+    #[error("No suitable {0} artifacts were found after `cargo build {}`", Self::maybe_opts_to_str(.1))]
+    NoSuitableArtifact(String, Option<Vec<String>>),
+    #[error("`cargo build {}` failed with exit status {0}", Self::maybe_opts_to_str(.1))]
+    CargoBuildExecFailed(std::process::ExitStatus, Option<Vec<String>>),
+    #[error("Failed to execute `cargo metadata`: {0}")]
+    CargoMetadataExecFailed(#[from] cargo_metadata::Error),
+    #[error("Failed to find root package from `cargo metadata`")]
+    CannotFindRootPackage,
+    #[error("Failed to canonicalize {0}: {1}")]
+    CannotCanonicalize(PathBuf, std::io::Error),
+    #[error("Failed to execute cargo: {0}")]
+    CargoBuildSpawnWaitError(#[source] std::io::Error),
+    #[error("Failed to read stdout message from cargo: {0}")]
+    StdoutError(#[source] std::io::Error),
+}
+
+impl CargoError {
+    fn maybe_opts_to_str(opts: &Option<Vec<String>>) -> String {
+        opts.as_ref().unwrap_or(&vec![]).join(" ")
+    }
+}
+
+impl diag::DiagnosableError for CargoError {
+    fn diagnose(&self) -> Vec<String> {
+        match self {
+            CargoError::MultipleSuitableArtifacts(kind, opts) => vec![
+                format!("Modify `cargo build {}` so that only one {}-crate is built. Try --bin or --example.", Self::maybe_opts_to_str(opts), kind)
+            ],
+            CargoError::NoSuitableArtifact(kind, opts) => vec![
+                format!("Modify `cargo build {}` so that a {}-crate is built. Try --bin or --example.", Self::maybe_opts_to_str(opts), kind)
+            ],
+            _ => vec![],
+        }
+    }
 }
 
 /// A functioality wrapper around subproccess calls to cargo in PATH.
@@ -31,7 +74,7 @@ impl CargoWrapper {
     /// Creates a new wrapper instance after ensuring that a cargo
     /// executable is available in `PATH`. Can be overridden via the
     /// `CARGO` environment variable.
-    pub fn new(crate_root: &Path, opts: Vec<String>) -> Result<(Self, Artifact)> {
+    pub fn new(crate_root: &Path, opts: Vec<String>) -> Result<(Self, Artifact), CargoError> {
         let cargo = Self::intermediate();
         let artifact = cargo.build(crate_root, Some(opts.clone()), "bin")?;
 
@@ -41,18 +84,17 @@ impl CargoWrapper {
             .position(|ref opt| opt.as_str() == "--manifest-path")
             .and_then(|idx| opts.get(idx + 1))
             .and_then(|arg| Some(PathBuf::from(arg)))
-            .unwrap_or(
-                find_manifest_path(&artifact)
-                    .context("Unable to resolve manifest path of target application")?,
-            );
+            .unwrap_or(find_manifest_path(&artifact)?);
         let metadata = cargo_metadata::MetadataCommand::new()
             .manifest_path(&manifest_path)
             .exec()
-            .context("Failed to read application metadata")?;
+            .map_err(|e| CargoError::CargoMetadataExecFailed(e))?;
 
         Ok((
             CargoWrapper {
-                target_dir: Some(metadata.target_directory.clone().canonicalize()?),
+                target_dir: Some(metadata.target_directory.clone().canonicalize().map_err(
+                    |e| CargoError::CannotCanonicalize(metadata.target_directory.clone(), e),
+                )?),
                 app_metadata: Some(metadata),
             },
             artifact,
@@ -67,10 +109,10 @@ impl CargoWrapper {
         self.app_metadata.as_ref().unwrap()
     }
 
-    pub fn package(&self) -> Result<&cargo_metadata::Package> {
+    pub fn package(&self) -> Result<&cargo_metadata::Package, CargoError> {
         self.metadata()
             .root_package()
-            .context("Could not find root package")
+            .ok_or(CargoError::CannotFindRootPackage)
     }
 
     /// Calls `cargo build` within the speficied `crate_root` with the
@@ -82,10 +124,10 @@ impl CargoWrapper {
         crate_root: &Path,
         opts: Option<Vec<String>>,
         expected_artifact_kind: &str,
-    ) -> Result<Artifact> {
+    ) -> Result<Artifact, CargoError> {
         let mut cargo = Self::cmd();
         cargo.arg("build");
-        if let Some(opts) = opts {
+        if let Some(ref opts) = opts {
             cargo.args(opts);
         }
 
@@ -106,7 +148,11 @@ impl CargoWrapper {
             cargo.args(
                 format!(
                     "--manifest-path {}",
-                    crate_root.canonicalize()?.join("Cargo.toml").display()
+                    crate_root
+                        .canonicalize()
+                        .map_err(|e| CargoError::CannotCanonicalize(crate_root.to_path_buf(), e))?
+                        .join("Cargo.toml")
+                        .display()
                 )
                 .split_whitespace(),
             );
@@ -114,36 +160,39 @@ impl CargoWrapper {
             cargo.current_dir(crate_root);
         }
 
-        let mut child = cargo.spawn()?;
+        let mut child = cargo
+            .spawn()
+            .map_err(|e| CargoError::CargoBuildSpawnWaitError(e))?;
         let stdout = BufReader::new(child.stdout.take().expect("Pipe to cargo process failed"));
 
         // NOTE(collect) ensure we don't block stdout which could
         // prevent the process from exiting
         let messages = Message::parse_stream(stdout).collect::<Vec<_>>();
 
-        let status = child.wait()?;
+        let status = child
+            .wait()
+            .map_err(|e| CargoError::CargoBuildSpawnWaitError(e))?;
         if !status.success() {
-            bail!(
-                "Failed to run cargo: exited with {}; command: {:?}",
-                status,
-                cargo
-            );
+            return Err(CargoError::CargoBuildExecFailed(status, opts));
         }
 
         let mut target_artifact: Option<Artifact> = None;
         for message in messages {
-            match message? {
+            match message.map_err(|e| CargoError::StdoutError(e))? {
                 Message::CompilerArtifact(artifact)
                     if artifact.target.kind == [expected_artifact_kind] =>
                 {
                     if target_artifact.is_some() {
-                        bail!("Can only have one matching artifact but found several");
+                        return Err(CargoError::MultipleSuitableArtifacts(
+                            expected_artifact_kind.to_string(),
+                            opts,
+                        ));
                     }
                     target_artifact = Some(artifact);
                 }
                 Message::CompilerMessage(msg) => {
                     if let Some(rendered) = msg.message.rendered {
-                        print!("{}", rendered);
+                        eprint!("{}", rendered);
                     }
                 }
                 _ => (),
@@ -151,16 +200,23 @@ impl CargoWrapper {
         }
 
         if target_artifact.is_none() {
-            bail!("Could not determine the wanted artifact");
+            return Err(CargoError::NoSuitableArtifact(
+                expected_artifact_kind.to_string(),
+                opts,
+            ));
         }
 
         Ok(target_artifact.unwrap())
     }
 }
 
-fn find_manifest_path(artifact: &cargo_metadata::Artifact) -> Result<PathBuf> {
-    let mut path = artifact.executable.clone().unwrap();
-    path.pop();
+fn find_manifest_path(artifact: &cargo_metadata::Artifact) -> Result<PathBuf, CargoError> {
+    let start_path = || {
+        let mut path = artifact.executable.clone().unwrap();
+        path.pop();
+        path
+    };
+    let mut path = start_path();
 
     loop {
         if {
@@ -175,7 +231,7 @@ fn find_manifest_path(artifact: &cargo_metadata::Artifact) -> Result<PathBuf> {
                 continue;
             }
 
-            bail!("Failed to find manifest");
+            return Err(CargoError::CannotFindManifest(start_path()));
         }
     }
 }
