@@ -1,4 +1,5 @@
-use crate::build::CargoWrapper;
+use crate::build::{self, CargoWrapper};
+use crate::diag;
 use crate::pacp::PACProperties;
 
 use std::collections::BTreeMap;
@@ -6,7 +7,6 @@ use std::fmt;
 use std::fs;
 use std::io::Write;
 
-use anyhow::{Context, Result};
 use cargo_metadata::Artifact;
 use chrono::Local;
 use include_dir::include_dir;
@@ -18,6 +18,7 @@ use rtic_scope_api::{self as api, EventChunk, EventType, TaskAction};
 use rtic_syntax;
 use serde::{Deserialize, Serialize};
 use syn;
+use thiserror::Error;
 
 type HwExceptionNumber = u8;
 type SwExceptionNumber = usize;
@@ -26,6 +27,41 @@ type TaskIdent = [String; 2];
 type ExternalHwAssocs = BTreeMap<HwExceptionNumber, (TaskIdent, ExceptionIdent)>;
 type InternalHwAssocs = BTreeMap<ExceptionIdent, TaskIdent>;
 type SwAssocs = BTreeMap<SwExceptionNumber, Vec<String>>;
+
+#[derive(Debug, Error)]
+pub enum RecoveryError {
+    #[error("The IRQ ({0:?}) -> RTIC task mapping does not exist")]
+    MissingHWLabelExceptionMap(itm_decode::cortex_m::Exception),
+    #[error("The IRQ ({0}) -> RTIC task mapping does not exist")]
+    MissingHWExceptionMap(u8),
+    #[error("Failed to read artifact source file: {0}")]
+    SourceRead(#[source] std::io::Error),
+    #[error("Failed to tokenize artifact source file: {0}")]
+    TokenizeFail(#[source] syn::Error),
+    #[error("Failed to find arguments to RTIC application")]
+    RTICArgumentsMissing,
+    #[error("Failed to parse the content of the RTIC application")]
+    RTICParseFail(#[source] syn::Error),
+    #[error("Failed to extract and/or configure the intermediate crate directory to disk: {0}")]
+    LibExtractFail(#[source] std::io::Error),
+    #[error("Failed to build the intermediate crate: {0}")]
+    LibBuildFail(#[from] build::CargoError),
+    #[error("Failed to load the intermediate shared object: {0}")]
+    LibLoadFail(#[source] libloading::Error),
+    #[error("Failed to lookup symbol in the intermediate shared object: {0}")]
+    LibLookupFail(#[source] libloading::Error),
+}
+
+impl diag::DiagnosableError for RecoveryError {
+    fn diagnose(&self) -> Vec<String> {
+        match self {
+            RecoveryError::RTICArgumentsMissing => vec![
+                "RTIC Scope expects an RTIC application declaration on the form `#[app(...)] mod app { ... }` where the first `...` is the application arguments.".to_string()
+            ],
+            _ => vec![],
+        }
+    }
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Metadata {
@@ -62,7 +98,10 @@ impl Metadata {
         self.comment.clone().unwrap_or("".to_string())
     }
 
-    pub fn build_event_chunk(&self, packets: TimestampedTracePackets) -> Result<EventChunk> {
+    pub fn build_event_chunk(
+        &self,
+        packets: TimestampedTracePackets,
+    ) -> Result<EventChunk, RecoveryError> {
         let timestamp = {
             let itm_decode::Timestamp {
                 base,
@@ -82,7 +121,7 @@ impl Metadata {
             }
         };
 
-        let resolve_exception = |&excpt| -> Result<String> {
+        let resolve_exception = |&excpt| -> Result<String, RecoveryError> {
             use itm_decode::cortex_m::VectActive;
 
             match excpt {
@@ -91,14 +130,14 @@ impl Metadata {
                     .maps
                     .exceptions
                     .get(&format!("{:?}", e))
-                    .with_context(|| format!("Exception map is missing key {:?}", e))?
+                    .ok_or(RecoveryError::MissingHWLabelExceptionMap(e))?
                     .join("::")),
                 VectActive::Interrupt { irqn } => {
                     let (fun, _bind) = self
                         .maps
                         .interrupts
                         .get(&irqn)
-                        .with_context(|| format!("Interrupt map is missing key {}", irqn))?;
+                        .ok_or(RecoveryError::MissingHWExceptionMap(irqn))?;
                     Ok(fun.join("::"))
                 }
             }
@@ -173,12 +212,16 @@ pub struct TaskResolver<'a> {
 }
 
 impl<'a> TaskResolver<'a> {
-    pub fn new(artifact: &Artifact, cargo: &'a CargoWrapper, pacp: PACProperties) -> Result<Self> {
+    pub fn new(
+        artifact: &Artifact,
+        cargo: &'a CargoWrapper,
+        pacp: PACProperties,
+    ) -> Result<Self, RecoveryError> {
         // parse the RTIC app from the source file
         let src = fs::read_to_string(&artifact.target.src_path)
-            .context("Failed to open artifact source file")?;
+            .map_err(|e| RecoveryError::SourceRead(e))?;
         let mut rtic_app = syn::parse_str::<TokenStream>(&src)
-            .context("Failed to tokenize file")?
+            .map_err(|e| RecoveryError::TokenizeFail(e))?
             .into_iter()
             .skip_while(|token| {
                 if let TokenTree::Group(g) = token {
@@ -195,7 +238,7 @@ impl<'a> TaskResolver<'a> {
                     args = Some(g.stream());
                 }
             }
-            args.context("Failed to find RTIC app arguments")?
+            args.ok_or(RecoveryError::RTICArgumentsMissing)?
         };
         let app = rtic_app.collect::<TokenStream>();
 
@@ -207,9 +250,9 @@ impl<'a> TaskResolver<'a> {
         })
     }
 
-    pub fn resolve(&self) -> Result<TaskResolveMaps> {
+    pub fn resolve(&self) -> Result<TaskResolveMaps, RecoveryError> {
         let (exceptions, interrupts) = self.hardware_tasks()?;
-        let sw_assocs = self.software_tasks()?;
+        let sw_assocs = self.software_tasks();
 
         Ok(TaskResolveMaps {
             exceptions,
@@ -221,7 +264,7 @@ impl<'a> TaskResolver<'a> {
     /// Parses an RTIC `mod app { ... }` declaration and associates the full
     /// path of the functions that are decorated with the `#[trace]`-macro
     /// with it's assigned task ID.
-    fn software_tasks(&self) -> Result<SwAssocs> {
+    fn software_tasks(&self) -> SwAssocs {
         struct TaskIDGenerator(usize);
         impl TaskIDGenerator {
             pub fn new() -> Self {
@@ -237,7 +280,8 @@ impl<'a> TaskResolver<'a> {
             }
         }
 
-        let app = syn::parse2::<syn::Item>(self.app.clone())?;
+        // NOTE(unwrap) the whole source file is parsed in [TaskResolver::new]
+        let app = syn::parse2::<syn::Item>(self.app.clone()).unwrap();
         let mut ctx: Vec<syn::Ident> = vec![];
         let mut assocs = SwAssocs::new();
         let mut id_gen = TaskIDGenerator::new();
@@ -306,17 +350,18 @@ impl<'a> TaskResolver<'a> {
 
         traverse_item(&app, &mut ctx, &mut assocs, &mut id_gen);
 
-        Ok(assocs)
+        assocs
     }
 
     /// Parses an RTIC `#[app(device = ...)] mod app { ... }` declaration
     /// and associates the full path of hardware task functions to their
     /// exception numbers as reported by the target.
-    fn hardware_tasks(&self) -> Result<(InternalHwAssocs, ExternalHwAssocs)> {
+    fn hardware_tasks(&self) -> Result<(InternalHwAssocs, ExternalHwAssocs), RecoveryError> {
         let (app, _analysis) = {
             let mut settings = rtic_syntax::Settings::default();
             settings.parse_binds = true;
-            rtic_syntax::parse2(self.app_args.clone(), self.app.clone(), settings)?
+            rtic_syntax::parse2(self.app_args.clone(), self.app.clone(), settings)
+                .map_err(|e| RecoveryError::RTICParseFail(e))?
         };
 
         // Find the bound exceptions from the #[task(bound = ...)]
@@ -388,7 +433,7 @@ impl<'a> TaskResolver<'a> {
         Ok((int_assocs, ext_assocs))
     }
 
-    fn resolve_int_nrs(&self, binds: &[Ident]) -> Result<BTreeMap<Ident, u8>> {
+    fn resolve_int_nrs(&self, binds: &[Ident]) -> Result<BTreeMap<Ident, u8>, RecoveryError> {
         const ADHOC_FUNC_PREFIX: &str = "rtic_scope_func_";
 
         // Extract adhoc source to a temporary directory and apply adhoc
@@ -396,17 +441,19 @@ impl<'a> TaskResolver<'a> {
         let target_dir = self.cargo.target_dir().join("cargo-rtic-trace-libadhoc");
         include_dir!("assets/libadhoc")
             .extract(&target_dir)
-            .context("Failed to extract libadhoc")?;
+            .map_err(|e| RecoveryError::LibExtractFail(e))?;
         // NOTE See <https://github.com/rust-lang/cargo/issues/9643>
         fs::rename(
             target_dir.join("not-Cargo.toml"),
             target_dir.join("Cargo.toml"),
-        )?;
+        )
+        .map_err(|e| RecoveryError::LibExtractFail(e))?;
         // Add required crate (and optional feature) as dependency
         {
             let mut manifest = fs::OpenOptions::new()
                 .append(true)
-                .open(target_dir.join("Cargo.toml"))?;
+                .open(target_dir.join("Cargo.toml"))
+                .map_err(|e| RecoveryError::LibExtractFail(e))?;
             let dep = format!(
                 "\n{} = {{ version = \"\", features = [{}]}}\n",
                 self.pacp.name,
@@ -417,17 +464,21 @@ impl<'a> TaskResolver<'a> {
                     .collect::<Vec<String>>()
                     .join(","),
             );
-            manifest.write_all(dep.as_bytes())?;
+            manifest
+                .write_all(dep.as_bytes())
+                .map_err(|e| RecoveryError::LibExtractFail(e))?;
         }
         // Prepare lib.rs
         {
             // Import PAC::Interrupt
             let mut src = fs::OpenOptions::new()
                 .append(true)
-                .open(target_dir.join("src/lib.rs"))?;
+                .open(target_dir.join("src/lib.rs"))
+                .map_err(|e| RecoveryError::LibExtractFail(e))?;
             let import = &self.pacp.interrupt_path;
             let import = quote!(use #import;);
-            src.write_all(format!("\n{}\n", import).as_bytes())?;
+            src.write_all(format!("\n{}\n", import).as_bytes())
+                .map_err(|e| RecoveryError::LibExtractFail(e))?;
 
             // Generate the functions that must be exported
             for bind in binds {
@@ -439,22 +490,30 @@ impl<'a> TaskResolver<'a> {
                         Interrupt::#int_ident.nr()
                     }
                 );
-                src.write_all(format!("\n{}\n", fun).as_bytes())?;
+                src.write_all(format!("\n{}\n", fun).as_bytes())
+                    .map_err(|e| RecoveryError::LibExtractFail(e))?;
             }
         }
 
         // Build the adhoc library, load it, and resolve all exception idents
-        let artifact = self.cargo.build(&target_dir, None, "cdylib")?;
-        let lib = unsafe { libloading::Library::new(artifact.filenames.first().unwrap())? };
-        Ok(binds
+        let artifact = self
+            .cargo
+            .build(&target_dir, None, "cdylib")
+            .map_err(|e| RecoveryError::LibBuildFail(e))?;
+        let lib = unsafe {
+            libloading::Library::new(artifact.filenames.first().unwrap())
+                .map_err(|e| RecoveryError::LibLoadFail(e))?
+        };
+        let binds: Result<Vec<(proc_macro2::Ident, u8)>, RecoveryError> = binds
             .into_iter()
             .map(|b| {
                 let func: libloading::Symbol<extern "C" fn() -> u8> = unsafe {
                     lib.get(format!("{}{}", ADHOC_FUNC_PREFIX, b).as_bytes())
-                        .expect("libadhoc was not correctly generated")
+                        .map_err(|e| RecoveryError::LibLookupFail(e))?
                 };
-                (b.clone(), func())
+                Ok((b.clone(), func()))
             })
-            .collect())
+            .collect();
+        Ok(binds?.iter().cloned().collect())
     }
 }
