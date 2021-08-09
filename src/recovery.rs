@@ -98,10 +98,7 @@ impl Metadata {
         self.comment.clone().unwrap_or("".to_string())
     }
 
-    pub fn build_event_chunk(
-        &self,
-        packets: TimestampedTracePackets,
-    ) -> Result<EventChunk, RecoveryError> {
+    pub fn build_event_chunk(&self, packets: TimestampedTracePackets) -> EventChunk {
         let timestamp = {
             let itm_decode::Timestamp {
                 base,
@@ -151,7 +148,13 @@ impl Metadata {
                     events.push(EventType::Overflow);
                 }
                 TracePacket::ExceptionTrace { exception, action } => events.push(EventType::Task {
-                    name: resolve_exception(exception)?,
+                    name: match resolve_exception(exception) {
+                        Ok(name) => name,
+                        Err(e) => {
+                            events.push(EventType::Unknown(packet.clone(), Some(format!("{}", e))));
+                            continue;
+                        }
+                    },
                     action: match action {
                         ExceptionAction::Entered => TaskAction::Entered,
                         ExceptionAction::Exited => TaskAction::Exited,
@@ -159,11 +162,11 @@ impl Metadata {
                     },
                 }),
                 // XXX Don't know how to convert
-                packet => events.push(EventType::Unknown(packet.clone())),
+                packet => events.push(EventType::Unknown(packet.clone(), None)),
             }
         }
 
-        Ok(EventChunk { timestamp, events })
+        EventChunk { timestamp, events }
     }
 }
 

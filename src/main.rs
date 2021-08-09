@@ -420,9 +420,9 @@ fn run_loop(
         for (sink, is_broken) in sinks.iter_mut() {
             match sink.drain(data.clone()) {
                 Ok(()) => (),
-                Err(sinks::SinkError::ResolveError(e)) => {
-                    stats.nonmappable = stats.nonmappable + 1;
-                    log::err(format!("{}", e));
+                Err(sinks::SinkError::ResolveError(unmappable)) => {
+                    stats.nonmappable = stats.nonmappable + unmappable.len();
+                    log::warn(format!("{}", sinks::SinkError::ResolveError(unmappable)));
                 }
                 Err(e) => {
                     log::err(format!(
