@@ -248,21 +248,23 @@ fn main_try() -> Result<(), RTICScopeError> {
     let h = halt.clone();
     ctrlc::set_handler(move || {
         h.store(true, Ordering::SeqCst);
+        println!("\n"); // separate sink errors from tracing status line, and don't erase it
     })
     .context("Failed to install SIGINT handler")?;
 
+    let prog = format!(
+        "{} ({})",
+        artifact.target.name,
+        artifact.target.src_path.display()
+    );
     log::status(
         "Recovering",
-        format!(
-            "metadata for {} ({}) and preparing target...",
-            artifact.target.name,
-            artifact.target.src_path.display()
-        ),
+        format!("metadata for {} and preparing target...", prog,),
     );
 
     // Configure source and sinks. Recover the information we need to
     // map IRQ numbers to RTIC tasks.
-    let (mut source, mut sinks, metadata) = match opts.cmd {
+    let (source, mut sinks, metadata) = match opts.cmd {
         Command::Trace(ref opts) => match trace(opts, &cargo, &artifact)? {
             Some(tup) => tup,
             None => return Ok(()),
@@ -335,25 +337,71 @@ fn main_try() -> Result<(), RTICScopeError> {
         );
     }
 
-    log::status(
-        match &opts.cmd {
-            Command::Trace(_) => "Tracing",
-            Command::Replay(_) => "Replaying",
-        },
-        format!("{}...", artifact.target.name),
-    );
-
     // All preparatory I/O and information recovery done. Forward all
     // trace packets to all sinks.
-    //
+    let retstatus = run_loop(source, sinks, halt, &opts, artifact.target.name);
+
+    // Wait for frontends to proccess all packets and echo its' stderr
+    for (i, (child, stderr)) in children.iter_mut().enumerate() {
+        let status = child.wait();
+        for err in BufReader::new(stderr).lines() {
+            log::err(format!(
+                "{}: {}",
+                opts.frontends.get(i).unwrap(),
+                err.context("Failed to read frontend stderr")?
+            ));
+        }
+        if let Err(err) = status {
+            log::err(format!(
+                "frontend {} exited non-zero: {}",
+                opts.frontends.get(i).unwrap(),
+                err
+            ));
+        }
+    }
+
+    retstatus
+}
+
+fn run_loop(
+    mut source: Box<dyn sources::Source>,
+    mut sinks: Vec<Box<dyn sinks::Sink>>,
+    halt: Arc<AtomicBool>,
+    opts: &Opts,
+    prog: String,
+) -> Result<(), RTICScopeError> {
     // Keep tabs on which sinks have broken during drain, if any.
     let mut sinks: Vec<(Box<dyn sinks::Sink>, bool)> =
         sinks.drain(..).map(|s| (s, false)).collect();
+
     let mut retstatus = Ok(());
     let mut buffer_warning = false;
+
+    #[derive(Default)]
+    struct Stats {
+        pub packets: usize,
+        pub malformed: usize,
+        pub nonmappable: usize,
+    }
+    let mut stats = Stats::default();
+
+    let instant = std::time::Instant::now();
+
     while let Some(data) = source.next() {
         if halt.load(Ordering::SeqCst) {
             break;
+        }
+
+        // Eventually warn about the source input buffer overflowing,
+        // but only once.
+        if !buffer_warning {
+            if let sources::BufferStatus::AvailWarn(avail, buf_sz) = source.avail_buffer() {
+                eprintln!(
+                    "Source buffer is almost full ({}/{} bytes free) and it not read quickly enough",
+                    avail, buf_sz
+                );
+                buffer_warning = true;
+            }
         }
 
         let data = data.with_context(|| {
@@ -363,30 +411,27 @@ fn main_try() -> Result<(), RTICScopeError> {
             )
         })?;
 
-        // Eventually warn about the source input buffer overflowing,
-        // but only once.
-        if !buffer_warning {
-            if let sources::BufferStatus::AvailWarn(avail, buf_sz) = source.avail_buffer() {
-                eprintln!(
-                "Source buffer is almost full ({}/{} bytes free) and it not read quickly enough",
-                avail, buf_sz
-                );
-                buffer_warning = true;
-            }
-        }
-
+        stats.packets = stats.packets + 1;
         if let Err(ref malformed) = data {
             log::warn(format!("failed to decode an ITM packet: {:?}", malformed));
+            stats.malformed = stats.malformed + 1;
         }
 
         for (sink, is_broken) in sinks.iter_mut() {
-            if let Err(e) = sink.drain(data.clone()) {
-                log::warn(format!(
-                    "failed to drain trace packets to {}: {:?}",
-                    sink.describe(),
-                    e
-                ));
-                *is_broken = true;
+            match sink.drain(data.clone()) {
+                Ok(()) => (),
+                Err(sinks::SinkError::ResolveError(e)) => {
+                    stats.nonmappable = stats.nonmappable + 1;
+                    log::err(format!("{}", e));
+                }
+                Err(e) => {
+                    log::err(format!(
+                        "failed to drain trace packets to {}: {:?}",
+                        sink.describe(),
+                        e
+                    ));
+                    *is_broken = true;
+                }
             }
         }
 
@@ -398,29 +443,50 @@ fn main_try() -> Result<(), RTICScopeError> {
             retstatus = Err(anyhow!("All sinks broken. Cannot continue."));
             break;
         }
+
+        let duration = instant.elapsed();
+        log::cont_status(
+            match opts.cmd {
+                Command::Trace(_) => "Tracing",
+                Command::Replay(_) => "Replaying",
+            },
+            format!(
+                "{}: {} packets processed in {time} (~{packets_per_sec} packets/s, {} malformed, {} non-mappable)...",
+                prog,
+                stats.packets,
+                stats.malformed,
+                stats.nonmappable,
+                packets_per_sec = if duration.as_secs() != 0 {
+                    stats.packets / duration.as_secs() as usize
+                } else {
+                    0
+                },
+                time = match duration.as_secs() {
+                    duration if duration > 60 * 60 => {
+                        let secs = duration % 60;
+                        let mins = (duration / 60) % 60;
+                        let hours = duration / 60 / 60;
+
+                        format!("{}h {}min {}s", hours, mins, secs)
+                    }
+                    duration if duration > 60 => {
+                        let secs = duration % 60;
+                        let mins = (duration / 60) % 60;
+
+                        format!("{}min {}s", mins, secs)
+                    }
+                    duration => {
+                        let secs = duration % 60;
+
+                        format!("{}s", secs)
+                    }
+                }
+            ),
+        );
     }
 
     // close frontend sockets
     drop(sinks);
-
-    // Wait for frontends to proccess all packets and echo its' stderr
-    for (i, (child, stderr)) in children.iter_mut().enumerate() {
-        let status = child.wait();
-        for err in BufReader::new(stderr).lines() {
-            eprintln!(
-                "{}: {}",
-                opts.frontends.get(i).unwrap(),
-                err.context("Failed to read frontend stderr")?
-            );
-        }
-        if let Err(err) = status {
-            eprintln!(
-                "Frontend {} exited with error: {}",
-                opts.frontends.get(i).unwrap(),
-                err
-            );
-        }
-    }
 
     retstatus.map_err(|e| e.into())
 }
