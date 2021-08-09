@@ -10,7 +10,6 @@ use std::sync::{
 
 use anyhow::{anyhow, Context};
 use cargo_metadata::Artifact;
-use colored::Colorize;
 use probe_rs_cli_util::{
     common_options::{CargoOptions, FlashOptions},
     flash,
@@ -20,6 +19,7 @@ use thiserror::Error;
 
 mod build;
 mod diag;
+mod log;
 mod pacp;
 mod recovery;
 mod sinks;
@@ -167,10 +167,8 @@ pub enum RTICScopeError {
 }
 
 impl RTICScopeError {
-    pub fn render(&self, mut f: impl std::io::Write) -> Result<(), std::io::Error> {
-        // print error message
-        write!(f, "{: >12} ", "Error".red().bold())?;
-        writeln!(f, "{}", self)?;
+    pub fn render(&self) {
+        log::err(format!("{}", self));
 
         // print eventual hints
         type DE = dyn diag::DiagnosableError;
@@ -180,30 +178,19 @@ impl RTICScopeError {
             Self::CargoError(e) => e as &DE,
             Self::SourceError(e) => e as &DE,
             Self::SinkError(e) => e as &DE,
-            _ => return Ok(()),
+            _ => return,
         }
         .diagnose();
         for hint in hints.iter() {
-            write!(f, "{: >12} ", "Hint".blue().bold())?;
-
-            for (i, line) in hint.lines().enumerate() {
-                if i == 0 {
-                    writeln!(f, "{}", line)?;
-                } else {
-                    writeln!(f, "{:>12}", line)?;
-                }
-            }
+            log::hint(hint.to_owned());
         }
-
-        Ok(())
     }
 }
 
 fn main() {
     if let Err(e) = main_try() {
-        e.render(std::io::stderr())
-            .expect("Failed to render error diagnostics");
-        std::process::exit(1);
+        e.render();
+        std::process::exit(1); // TODO make retval depend on error type?
     }
 }
 
@@ -249,11 +236,10 @@ fn main_try() -> Result<(), RTICScopeError> {
     })
     .context("Failed to install SIGINT handler")?;
 
-    eprintln!(
-        "  {} metadata for {prog} and preparing target...",
-        "Recovering".green().bold(),
-        prog = format!(
-            "{} ({})",
+    log::status(
+        "Recovering",
+        format!(
+            "metadata for {} ({}) and preparing target...",
             artifact.target.name,
             artifact.target.src_path.display()
         ),
@@ -282,13 +268,15 @@ fn main_try() -> Result<(), RTICScopeError> {
         }
     };
 
-    eprintln!(
-        "   {} {ntotal} task(s) from {prog}: {nhard} hard, {nsoft} soft. Target reset.",
-        "Recovered".green().bold(),
-        ntotal = metadata.hardware_tasks() + metadata.software_tasks(),
-        prog = artifact.target.name,
-        nhard = metadata.hardware_tasks(),
-        nsoft = metadata.software_tasks(),
+    log::status(
+        "Recovered",
+        format!(
+            "{ntotal} task(s) from {prog}: {nhard} hard, {nsoft} soft. Target reset.",
+            ntotal = metadata.hardware_tasks() + metadata.software_tasks(),
+            prog = artifact.target.name,
+            nhard = metadata.hardware_tasks(),
+            nsoft = metadata.software_tasks()
+        ),
     );
 
     // Spawn frontend children and get path to sockets. Create and push sinks.
@@ -326,22 +314,18 @@ fn main_try() -> Result<(), RTICScopeError> {
     }
 
     if let sources::BufferStatus::Unknown = source.avail_buffer() {
-        eprintln!(
-            "{}: buffer size of source {} could not be found; buffer may overflow and corrupt trace stream without further warning",
-            "warning".yellow().bold(),
-            source.describe(),
+        log::warn(format!(
+            "buffer size of source {} could not be found; buffer may overflow and corrupt trace stream without further warning",
+            source.describe())
         );
     }
 
-    eprintln!(
-        "    {} {}...",
+    log::status(
         match &opts.cmd {
             Command::Trace(_) => "Tracing",
             Command::Replay(_) => "Replaying",
-        }
-        .green()
-        .bold(),
-        artifact.target.name,
+        },
+        format!("{}...", artifact.target.name),
     );
 
     // All preparatory I/O and information recovery done. Forward all
@@ -377,20 +361,16 @@ fn main_try() -> Result<(), RTICScopeError> {
         }
 
         if let Err(ref malformed) = data {
-            eprintln!(
-                "{}: failed to decode an ITM packet: {:?}",
-                "warning".yellow().bold(),
-                malformed, // TODO thiserror
-            );
+            log::warn(format!("failed to decode an ITM packet: {:?}", malformed));
         }
 
         for (sink, is_broken) in sinks.iter_mut() {
             if let Err(e) = sink.drain(data.clone()) {
-                eprintln!(
-                    "Failed to drain trace packets to {}: {:?}",
+                log::warn(format!(
+                    "failed to drain trace packets to {}: {:?}",
                     sink.describe(),
                     e
-                );
+                ));
                 *is_broken = true;
             }
         }
