@@ -373,6 +373,7 @@ fn run_loop(
     // Keep tabs on which sinks have broken during drain, if any.
     let mut sinks: Vec<(Box<dyn sinks::Sink>, bool)> =
         sinks.drain(..).map(|s| (s, false)).collect();
+    let sinks_at_start = sinks.len();
 
     let mut retstatus = Ok(());
     let mut buffer_warning = false;
@@ -451,7 +452,7 @@ fn run_loop(
                 Command::Replay(_) => "Replaying",
             },
             format!(
-                "{}: {} packets processed in {time} (~{packets_per_sec} packets/s, {} malformed, {} non-mappable)...",
+                "{}: {} packets processed in {time} (~{packets_per_sec} packets/s, {} malformed, {} non-mappable); {sinks}...",
                 prog,
                 stats.packets,
                 stats.malformed,
@@ -480,7 +481,8 @@ fn run_loop(
 
                         format!("{}s", secs)
                     }
-                }
+                },
+                sinks = format!("{}/{} sinks operational", sinks.len(), sinks_at_start),
             ),
         );
     }
