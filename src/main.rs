@@ -152,7 +152,6 @@ pub enum RTICScopeError {
     // transparent errors
     #[error(transparent)]
     PACError(#[from] pacp::PACMetadataError),
-    // #[error("Failed to recover metadata from RTIC application: {0}")]
     #[error(transparent)]
     MetadataError(#[from] recovery::RecoveryError),
     #[error(transparent)]
