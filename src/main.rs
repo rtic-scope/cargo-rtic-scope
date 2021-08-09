@@ -166,22 +166,38 @@ pub enum RTICScopeError {
     Other(#[from] anyhow::Error),
 }
 
+impl diag::DiagnosableError for RTICScopeError {
+    fn diagnose(&self) -> Vec<String> {
+        match self {
+            RTICScopeError::PACError(_) => vec![
+                "PAC properties can be set via --pac, --pac-features, --pac-interrupt-path".to_string(),
+                "[package.metadata.rtic-scope] takes precedence over [workspace.metadata.rtic-scope]".to_string(),
+            ],
+            _ => vec![],
+        }
+    }
+}
+
 impl RTICScopeError {
     pub fn render(&self) {
         log::err(format!("{}", self));
 
         // print eventual hints
-        type DE = dyn diag::DiagnosableError;
-        let hints = match self {
-            Self::PACError(e) => e as &DE,
-            Self::MetadataError(e) => e as &DE,
-            Self::CargoError(e) => e as &DE,
-            Self::SourceError(e) => e as &DE,
-            Self::SinkError(e) => e as &DE,
-            _ => return,
-        }
-        .diagnose();
-        for hint in hints.iter() {
+        use crate::diag::DiagnosableError;
+        type DE = dyn DiagnosableError;
+        for hint in self.diagnose().iter().chain(
+            match self {
+                Self::PACError(e) => Some(e as &DE),
+                Self::MetadataError(e) => Some(e as &DE),
+                Self::CargoError(e) => Some(e as &DE),
+                Self::SourceError(e) => Some(e as &DE),
+                Self::SinkError(e) => Some(e as &DE),
+                _ => None,
+            }
+            .and_then(|e| Some(e.diagnose()))
+            .unwrap_or(vec![])
+            .iter(),
+        ) {
             log::hint(hint.to_owned());
         }
     }
