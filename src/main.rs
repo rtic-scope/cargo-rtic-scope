@@ -463,14 +463,14 @@ fn run_loop(
                     0
                 },
                 time = match duration.as_secs() {
-                    duration if duration > 60 * 60 => {
+                    duration if duration >= 60 * 60 => {
                         let secs = duration % 60;
                         let mins = (duration / 60) % 60;
                         let hours = duration / 60 / 60;
 
                         format!("{}h {}min {}s", hours, mins, secs)
                     }
-                    duration if duration > 60 => {
+                    duration if duration >= 60 => {
                         let secs = duration % 60;
                         let mins = (duration / 60) % 60;
 
