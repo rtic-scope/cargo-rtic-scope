@@ -89,21 +89,19 @@ impl PACProperties {
         let package_meta = cargo.package().unwrap().metadata.get("rtic-scope");
         let workspace_meta = cargo.metadata().workspace_metadata.get("rtic-scope");
 
-        let deser = |v: serde_json::Value| {
-            serde_json::from_value(v).map_err(|e| PACMetadataError::DeserializationFailed(e))
-        };
+        use serde_json::from_value;
 
         // Read from cargo manifest
         let mut int = match (package_meta, workspace_meta) {
             (Some(pkg), Some(wrk)) => {
-                let mut pkg: PACPropertiesIntermediate = deser(pkg.to_owned())?;
-                let wrk: PACPropertiesIntermediate = deser(wrk.to_owned())?;
+                let mut pkg: PACPropertiesIntermediate = from_value(pkg.to_owned())?;
+                let wrk: PACPropertiesIntermediate = from_value(wrk.to_owned())?;
 
                 pkg.complete_with(wrk);
                 pkg
             }
-            (Some(pkg), None) => deser(pkg.to_owned())?,
-            (None, Some(wrk)) => deser(wrk.to_owned())?,
+            (Some(pkg), None) => from_value(pkg.to_owned())?,
+            (None, Some(wrk)) => from_value(wrk.to_owned())?,
             _ => PACPropertiesIntermediate::default(),
         };
 

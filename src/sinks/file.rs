@@ -40,8 +40,7 @@ impl FileSink {
         // "blinky-gbaadf00-dirty-2021-06-16T17:13:16.trace"
         let repo = find_git_repo(artifact.target.src_path.clone())?;
         let git_shortdesc = repo
-            .describe(&DescribeOptions::new().show_commit_oid_as_fallback(true))
-            .map_err(|e| SinkError::GitError(e))?
+            .describe(&DescribeOptions::new().show_commit_oid_as_fallback(true))?
             .format(Some(
                 &DescribeFormatOptions::new()
                     .abbreviated_size(7)
@@ -98,7 +97,7 @@ impl FileSink {
         // sequence refers to trace packets.
         let metadata = Metadata::new(maps, ts, freq, comment);
         {
-            let json = serde_json::to_string(&metadata).map_err(|e| SinkError::DrainSerError(e))?;
+            let json = serde_json::to_string(&metadata)?;
             self.file.write_all(json.as_bytes())
         }
         .map_err(|e| SinkError::DrainIOError(e))?;
@@ -109,7 +108,7 @@ impl FileSink {
 
 impl Sink for FileSink {
     fn drain(&mut self, data: TraceData) -> Result<(), SinkError> {
-        let json = serde_json::to_string(&data).map_err(|e| SinkError::DrainSerError(e))?;
+        let json = serde_json::to_string(&data)?;
         self.file
             .write_all(json.as_bytes())
             .map_err(|e| SinkError::DrainIOError(e))?;

@@ -496,10 +496,7 @@ impl<'a> TaskResolver<'a> {
         }
 
         // Build the adhoc library, load it, and resolve all exception idents
-        let artifact = self
-            .cargo
-            .build(&target_dir, None, "cdylib")
-            .map_err(|e| RecoveryError::LibBuildFail(e))?;
+        let artifact = self.cargo.build(&target_dir, None, "cdylib")?;
         let lib = unsafe {
             libloading::Library::new(artifact.filenames.first().unwrap())
                 .map_err(|e| RecoveryError::LibLoadFail(e))?

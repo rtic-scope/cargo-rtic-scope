@@ -20,17 +20,9 @@ impl FrontendSink {
 impl Sink for FrontendSink {
     fn drain(&mut self, data: TraceData) -> Result<(), SinkError> {
         let json = match data {
-            Ok(packets) => serde_json::to_string(
-                &self
-                    .metadata
-                    .build_event_chunk(packets)
-                    .map_err(|e| SinkError::ResolveError(e))?,
-            )
-            .map_err(|e| SinkError::DrainSerError(e)),
-            Err(malformed) => {
-                serde_json::to_string(&malformed).map_err(|e| SinkError::DrainSerError(e))
-            }
-        }?;
+            Ok(packets) => serde_json::to_string(&self.metadata.build_event_chunk(packets)?)?,
+            Err(malformed) => serde_json::to_string(&malformed)?,
+        };
         self.socket
             .write_all(json.as_bytes())
             .map_err(|e| SinkError::DrainIOError(e))

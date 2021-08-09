@@ -87,8 +87,7 @@ impl CargoWrapper {
             .unwrap_or(find_manifest_path(&artifact)?);
         let metadata = cargo_metadata::MetadataCommand::new()
             .manifest_path(&manifest_path)
-            .exec()
-            .map_err(|e| CargoError::CargoMetadataExecFailed(e))?;
+            .exec()?;
 
         Ok((
             CargoWrapper {
