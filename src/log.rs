@@ -1,11 +1,16 @@
 use colored::Colorize;
-use std::io::Write;
+use crossterm::{
+    cursor,
+    terminal::{Clear, ClearType},
+    ExecutableCommand,
+};
+use std::io::stderr;
 
 fn indent_with(header: colored::ColoredString, msg: String) {
-    // erase already printed line
-    std::io::stderr().write_all(&[27]).unwrap();
-    eprint!("[2K\r");
+    // clear current line
+    let _ = stderr().execute(Clear(ClearType::CurrentLine));
 
+    let _ = stderr().execute(cursor::MoveToColumn(0));
     eprint!("{:>12} ", header);
     for (i, line) in msg.lines().enumerate() {
         if i == 0 {
@@ -17,7 +22,9 @@ fn indent_with(header: colored::ColoredString, msg: String) {
 }
 
 pub fn cont_status(header: &str, msg: String) {
-    eprint!("\r{:>12} {}", header.green().bold(), msg);
+    let _ = stderr().execute(cursor::MoveToColumn(0));
+    eprint!("{:>12} {}", header.green().bold(), msg);
+    let _ = stderr().execute(cursor::MoveToColumn(0));
 }
 
 pub fn status(header: &str, msg: String) {
