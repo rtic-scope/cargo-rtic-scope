@@ -70,8 +70,9 @@ pub enum EventType {
     },
 
     /// Target emitted package for which no RTIC information could be
-    /// associated.
-    Unknown(TracePacket),
+    /// associated. Optional string describes why a packet information
+    /// could not be mapped.
+    Unknown(TracePacket, Option<String>),
 
     Invalid(MalformedPacket),
 }
