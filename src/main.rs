@@ -8,7 +8,7 @@ use std::sync::{
     Arc,
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Context};
 use cargo_metadata::Artifact;
 use colored::Colorize;
 use probe_rs_cli_util::{
@@ -16,6 +16,7 @@ use probe_rs_cli_util::{
     flash,
 };
 use structopt::StructOpt;
+use thiserror::Error;
 
 mod build;
 mod diag;
@@ -139,7 +140,74 @@ enum Command {
     Replay(ReplayOptions),
 }
 
-fn main() -> Result<()> {
+#[derive(Debug, Error)]
+pub enum RTICScopeError {
+    // adhoc errors
+    // TODO remove?
+    #[error("Probe setup and/or initialization failed: {0}")]
+    CommonProbeOperationError(#[from] probe_rs_cli_util::common_options::OperationError),
+    #[error("I/O operation failed: {0}")]
+    IOError(#[from] std::io::Error),
+
+    // transparent errors
+    #[error(transparent)]
+    PACError(#[from] pacp::PACMetadataError),
+    // #[error("Failed to recover metadata from RTIC application: {0}")]
+    #[error(transparent)]
+    MetadataError(#[from] recovery::RecoveryError),
+    #[error(transparent)]
+    CargoError(#[from] build::CargoError),
+    #[error(transparent)]
+    SourceError(#[from] sources::SourceError),
+    #[error(transparent)]
+    SinkError(#[from] sinks::SinkError),
+
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+impl RTICScopeError {
+    pub fn render(&self, mut f: impl std::io::Write) -> Result<(), std::io::Error> {
+        // print error message
+        write!(f, "{: >12} ", "Error".red().bold())?;
+        writeln!(f, "{}", self)?;
+
+        // print eventual hints
+        type DE = dyn diag::DiagnosableError;
+        let hints = match self {
+            Self::PACError(e) => e as &DE,
+            Self::MetadataError(e) => e as &DE,
+            Self::CargoError(e) => e as &DE,
+            Self::SourceError(e) => e as &DE,
+            Self::SinkError(e) => e as &DE,
+            _ => return Ok(()),
+        }
+        .diagnose();
+        for hint in hints.iter() {
+            write!(f, "{: >12} ", "Hint".blue().bold())?;
+
+            for (i, line) in hint.lines().enumerate() {
+                if i == 0 {
+                    writeln!(f, "{}", line)?;
+                } else {
+                    writeln!(f, "{:>12}", line)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+fn main() {
+    if let Err(e) = main_try() {
+        e.render(std::io::stderr())
+            .expect("Failed to render error diagnostics");
+        std::process::exit(1);
+    }
+}
+
+fn main_try() -> Result<(), RTICScopeError> {
     // Handle CLI options
     let mut args: Vec<_> = std::env::args().collect();
     // When called by cargo, first argument will be "rtic-scope".
@@ -359,7 +427,7 @@ fn main() -> Result<()> {
         }
     }
 
-    retstatus
+    retstatus.map_err(|e| e.into())
 }
 
 type TraceTuple = (
@@ -372,11 +440,10 @@ fn resolve_maps(
     cargo: &CargoWrapper,
     pac: &PACOptions,
     artifact: &Artifact,
-) -> Result<recovery::TaskResolveMaps> {
+) -> Result<recovery::TaskResolveMaps, RTICScopeError> {
     // Find crate name, features and path to interrupt enum from
     // manifest metadata, or override options.
-    let pacp = pacp::PACProperties::new(cargo, pac)
-        .context("Failed to complete PAC propeties from manifest metadata")?;
+    let pacp = pacp::PACProperties::new(cargo, pac)?;
 
     // Map IRQ numbers and DWT matches to their respective RTIC tasks
     let maps = recovery::TaskResolver::new(artifact, cargo, pacp)
@@ -391,12 +458,12 @@ fn trace(
     opts: &TraceOptions,
     cargo: &CargoWrapper,
     artifact: &Artifact,
-) -> Result<Option<TraceTuple>> {
+) -> Result<Option<TraceTuple>, RTICScopeError> {
     let mut session = opts
         .flash_options
         .probe_options
         .simple_attach()
-        .context("Faled to attach to target session")?;
+        .context("Failed to attach to target session")?;
 
     // TODO make this into Sink::generate().remove_old(), etc.
     let mut trace_sink = sinks::FileSink::generate_trace_file(
@@ -446,7 +513,7 @@ fn replay(
     opts: &ReplayOptions,
     cargo: &CargoWrapper,
     artifact: &Artifact,
-) -> Result<Option<TraceTuple>> {
+) -> Result<Option<TraceTuple>, RTICScopeError> {
     match opts {
         ReplayOptions {
             raw_options:
