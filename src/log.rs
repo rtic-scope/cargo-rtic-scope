@@ -11,7 +11,7 @@ fn indent_with(header: colored::ColoredString, msg: String) {
         if i == 0 {
             eprintln!("{}", line);
         } else {
-            eprintln!("{:>12} ", line);
+            eprintln!("{:>12} {}", " ", line);
         }
     }
 }
