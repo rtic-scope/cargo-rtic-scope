@@ -243,15 +243,6 @@ fn main_try() -> Result<(), RTICScopeError> {
         .to_cargo_options(),
     )?;
 
-    // Setup SIGINT handler
-    let halt = Arc::new(AtomicBool::new(false));
-    let h = halt.clone();
-    ctrlc::set_handler(move || {
-        h.store(true, Ordering::SeqCst);
-        println!("\n"); // separate sink errors from tracing status line, and don't erase it
-    })
-    .context("Failed to install SIGINT handler")?;
-
     let prog = format!(
         "{} ({})",
         artifact.target.name,
@@ -339,7 +330,7 @@ fn main_try() -> Result<(), RTICScopeError> {
 
     // All preparatory I/O and information recovery done. Forward all
     // trace packets to all sinks.
-    let retstatus = run_loop(source, sinks, halt, &opts, artifact.target.name);
+    let retstatus = run_loop(source, sinks, &opts, artifact.target.name);
 
     // Wait for frontends to proccess all packets and echo its' stderr
     for (i, (child, stderr)) in children.iter_mut().enumerate() {
@@ -366,10 +357,18 @@ fn main_try() -> Result<(), RTICScopeError> {
 fn run_loop(
     mut source: Box<dyn sources::Source>,
     mut sinks: Vec<Box<dyn sinks::Sink>>,
-    halt: Arc<AtomicBool>,
     opts: &Opts,
     prog: String,
 ) -> Result<(), RTICScopeError> {
+    // Setup SIGINT handler
+    let halt = Arc::new(AtomicBool::new(false));
+    let h = halt.clone();
+    ctrlc::set_handler(move || {
+        h.store(true, Ordering::SeqCst);
+        println!("\n"); // separate sink errors from tracing status line, and don't erase it
+    })
+    .context("Failed to install SIGINT handler")?;
+
     // Keep tabs on which sinks have broken during drain, if any.
     let mut sinks: Vec<(Box<dyn sinks::Sink>, bool)> =
         sinks.drain(..).map(|s| (s, false)).collect();
