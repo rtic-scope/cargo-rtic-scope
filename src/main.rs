@@ -417,30 +417,35 @@ fn run_loop(
         // Try to decode the packet.
         stats.packets = stats.packets + 1;
         if let Err(ref malformed) = data {
-            log::warn(format!(
-                "failed to decode an ITM packet: {}: {:?}",
-                malformed, malformed
-            ));
+            log::err(format!("cannot decode ITM packet: {}: {:?}", malformed, malformed));
             stats.malformed = stats.malformed + 1;
         }
 
         // Try to recover RTIC information for the packets.
         let chunk = if let Ok(ref packets) = data {
             let chunk = metadata.build_event_chunk(packets.clone());
-            let unmappable: Vec<_> = chunk
-                .events
-                .iter()
-                .filter_map(|e| {
-                    if let api::EventType::Unknown(e, w) = e {
-                        Some((e.to_owned(), w.to_owned()))
-                    } else {
-                        None
+
+            // Report any unmappable/unknown events that occured
+            for event in chunk.events.iter() {
+                match event {
+                    api::EventType::Unmappable(ref packet, ref reason) => {
+                        stats.nonmappable = stats.nonmappable + 1;
+                        log::warn(format!(
+                            "cannot map {:?} packet: {}",
+                            packet, reason
+                        ));
                     }
-                })
-                .collect();
-            stats.nonmappable = stats.nonmappable + unmappable.len();
-            if unmappable.len() > 0 {
-                log::warn(format!("{}", sinks::SinkError::ResolveError(unmappable)));
+                    api::EventType::Unknown(ref packet) => {
+                        stats.nonmappable = stats.nonmappable + 1;
+                        log::warn(format!(
+                            "cannot map {:?} packet",
+                            packet
+                        ));
+                    }
+                    api::EventType::Invalid(_) => (), // dont report decode errors twice
+                    api::EventType::Overflow => log::warn("Overflow detected! Packets may have been dropped and timestamps will be diverged until the next global timestamp".to_string()),
+                    _ => (),
+                }
             }
 
             Some(chunk)

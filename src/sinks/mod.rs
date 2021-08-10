@@ -20,32 +20,10 @@ pub enum SinkError {
     DrainSerError(#[from] serde_json::Error),
     #[error("Failed to drain trace data on I/O: {0}")]
     DrainIOError(#[source] std::io::Error),
-    #[error("Failed to associate RTIC information to some trace packets: {}", Self::format_unmappable(.0))]
-    ResolveError(Vec<(itm_decode::TracePacket, Option<String>)>),
     #[error("Failed to reset target device: {0}")]
     ResetError(#[from] probe_rs::Error),
     #[error("Failed to setup sink because the source failed: {0}")]
     SourceError(#[from] crate::sources::SourceError),
-}
-
-impl SinkError {
-    fn format_unmappable(unmappable: &Vec<(itm_decode::TracePacket, Option<String>)>) -> String {
-        unmappable
-            .iter()
-            .map(|(packet, reason)| {
-                format!(
-                    "{:?}{}",
-                    packet,
-                    if let Some(reason) = reason {
-                        format!(": {}", reason)
-                    } else {
-                        "".to_string()
-                    }
-                )
-            })
-            .collect::<Vec<_>>()
-            .join(";\n")
-    }
 }
 
 impl diag::DiagnosableError for SinkError {}

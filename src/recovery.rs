@@ -144,6 +144,7 @@ impl Metadata {
         let mut events = vec![];
         for packet in packets.packets.iter() {
             match packet {
+                TracePacket::Sync => (), // noop: only used for byte alignment; contains no data
                 TracePacket::Overflow => {
                     events.push(EventType::Overflow);
                 }
@@ -151,7 +152,7 @@ impl Metadata {
                     name: match resolve_exception(exception) {
                         Ok(name) => name,
                         Err(e) => {
-                            events.push(EventType::Unknown(packet.clone(), Some(format!("{}", e))));
+                            events.push(EventType::Unmappable(packet.clone(), e.to_string()));
                             continue;
                         }
                     },
@@ -162,7 +163,7 @@ impl Metadata {
                     },
                 }),
                 // XXX Don't know how to convert
-                packet => events.push(EventType::Unknown(packet.clone(), None)),
+                packet => events.push(EventType::Unknown(packet.clone())),
             }
         }
 
