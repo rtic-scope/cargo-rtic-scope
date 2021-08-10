@@ -1,4 +1,3 @@
-use crate::recovery::Metadata;
 use crate::sinks::{Sink, SinkError};
 use crate::TraceData;
 
@@ -9,50 +8,25 @@ use serde_json;
 
 pub struct FrontendSink {
     socket: std::os::unix::net::UnixStream,
-    metadata: Metadata,
 }
 
 impl FrontendSink {
-    pub fn new(socket: std::os::unix::net::UnixStream, metadata: Metadata) -> Self {
-        Self { socket, metadata }
+    pub fn new(socket: std::os::unix::net::UnixStream) -> Self {
+        Self { socket }
     }
 }
 
 impl Sink for FrontendSink {
-    fn drain(&mut self, data: TraceData) -> Result<(), SinkError> {
-        // serialize to JSON, and record any unmappable packets
-        let mut unmappable = vec![];
-        let json = match data {
-            Ok(packets) => {
-                let chunk = self.metadata.build_event_chunk(packets);
-                unmappable.append(
-                    &mut chunk
-                        .events
-                        .iter()
-                        .filter_map(|e| {
-                            if let api::EventType::Unknown(e, w) = e {
-                                Some((e.to_owned(), w.to_owned()))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect(),
-                );
-
-                serde_json::to_string(&chunk)?
-            }
-            Err(malformed) => serde_json::to_string(&malformed)?,
+    fn drain(&mut self, data: TraceData, chunk: Option<api::EventChunk>) -> Result<(), SinkError> {
+        let json = match (data, chunk) {
+            (Err(malformed), None) => serde_json::to_string(&malformed)?,
+            (_, Some(chunk)) => serde_json::to_string(&chunk)?,
+            _ => unreachable!(),
         };
-        // XXX: unmappable packets are not reported if I/O fails
+
         self.socket
             .write_all(json.as_bytes())
-            .map_err(|e| SinkError::DrainIOError(e))?;
-
-        if !unmappable.is_empty() {
-            Err(SinkError::ResolveError(unmappable))
-        } else {
-            Ok(())
-        }
+            .map_err(|e| SinkError::DrainIOError(e))
     }
 
     fn describe(&self) -> String {

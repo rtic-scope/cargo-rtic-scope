@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use cargo_metadata::Artifact;
 use chrono::prelude::*;
 use git2::{DescribeFormatOptions, DescribeOptions, Repository};
+use rtic_scope_api as api;
 use serde_json;
 
 const TRACE_FILE_EXT: &'static str = ".trace";
@@ -107,13 +108,11 @@ impl FileSink {
 }
 
 impl Sink for FileSink {
-    fn drain(&mut self, data: TraceData) -> Result<(), SinkError> {
+    fn drain(&mut self, data: TraceData, _: Option<api::EventChunk>) -> Result<(), SinkError> {
         let json = serde_json::to_string(&data)?;
         self.file
             .write_all(json.as_bytes())
-            .map_err(|e| SinkError::DrainIOError(e))?;
-
-        Ok(())
+            .map_err(|e| SinkError::DrainIOError(e))
     }
 
     fn describe(&self) -> String {

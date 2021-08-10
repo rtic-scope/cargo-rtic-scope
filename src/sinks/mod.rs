@@ -1,6 +1,7 @@
 use crate::diag;
 use crate::TraceData;
 
+use rtic_scope_api as api;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -56,6 +57,6 @@ mod frontend;
 pub use frontend::FrontendSink;
 
 pub trait Sink {
-    fn drain(&mut self, data: TraceData) -> Result<(), SinkError>;
+    fn drain(&mut self, data: TraceData, chunk: Option<api::EventChunk>) -> Result<(), SinkError>;
     fn describe(&self) -> String;
 }

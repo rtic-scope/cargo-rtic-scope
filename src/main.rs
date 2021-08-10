@@ -14,6 +14,7 @@ use probe_rs_cli_util::{
     common_options::{CargoOptions, FlashOptions},
     flash,
 };
+use rtic_scope_api as api;
 use structopt::StructOpt;
 use thiserror::Error;
 
@@ -311,7 +312,7 @@ fn main_try() -> Result<(), RTICScopeError> {
             .context("Failed to read socket path from frontend child process")?;
             let socket = std::os::unix::net::UnixStream::connect(&socket_path)
                 .context("Failed to connect to frontend socket")?;
-            sinks.push(Box::new(sinks::FrontendSink::new(socket, metadata.clone())));
+            sinks.push(Box::new(sinks::FrontendSink::new(socket)));
         }
 
         let stderr = child
@@ -330,7 +331,7 @@ fn main_try() -> Result<(), RTICScopeError> {
 
     // All preparatory I/O and information recovery done. Forward all
     // trace packets to all sinks.
-    let retstatus = run_loop(source, sinks, &opts, artifact.target.name);
+    let retstatus = run_loop(source, sinks, metadata.clone(), &opts, artifact.target.name);
 
     // Wait for frontends to proccess all packets and echo its' stderr
     for (i, (child, stderr)) in children.iter_mut().enumerate() {
@@ -357,6 +358,7 @@ fn main_try() -> Result<(), RTICScopeError> {
 fn run_loop(
     mut source: Box<dyn sources::Source>,
     mut sinks: Vec<Box<dyn sinks::Sink>>,
+    metadata: recovery::Metadata,
     opts: &Opts,
     prog: String,
 ) -> Result<(), RTICScopeError> {
@@ -404,6 +406,7 @@ fn run_loop(
             }
         }
 
+        // Try to read data from the source. Failure is fatal.
         let data = data.with_context(|| {
             format!(
                 "Failed to read trace data from source {}",
@@ -411,27 +414,45 @@ fn run_loop(
             )
         })?;
 
+        // Try to decode the packet.
         stats.packets = stats.packets + 1;
         if let Err(ref malformed) = data {
             log::warn(format!("failed to decode an ITM packet: {:?}", malformed));
             stats.malformed = stats.malformed + 1;
         }
 
+        // Try to recover RTIC information for the packets.
+        let chunk = if let Ok(ref packets) = data {
+            let chunk = metadata.build_event_chunk(packets.clone());
+            let unmappable: Vec<_> = chunk
+                .events
+                .iter()
+                .filter_map(|e| {
+                    if let api::EventType::Unknown(e, w) = e {
+                        Some((e.to_owned(), w.to_owned()))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            stats.nonmappable = stats.nonmappable + unmappable.len();
+            if unmappable.len() > 0 {
+                log::warn(format!("{}", sinks::SinkError::ResolveError(unmappable)));
+            }
+
+            Some(chunk)
+        } else {
+            None
+        };
+
         for (sink, is_broken) in sinks.iter_mut() {
-            match sink.drain(data.clone()) {
-                Ok(()) => (),
-                Err(sinks::SinkError::ResolveError(unmappable)) => {
-                    stats.nonmappable = stats.nonmappable + unmappable.len();
-                    log::warn(format!("{}", sinks::SinkError::ResolveError(unmappable)));
-                }
-                Err(e) => {
-                    log::err(format!(
-                        "failed to drain trace packets to {}: {:?}",
-                        sink.describe(),
-                        e
-                    ));
-                    *is_broken = true;
-                }
+            if let Err(e) = sink.drain(data.clone(), chunk.clone()) {
+                log::err(format!(
+                    "failed to drain trace packets to {}: {:?}",
+                    sink.describe(),
+                    e
+                ));
+                *is_broken = true;
             }
         }
 
