@@ -682,9 +682,9 @@ dependencies = [
 
 [[package]]
 name = "itm-decode"
-version = "0.4.0-alpha.1"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5c9cbeb4b65026300e314c8eec1241811c304efbd5f4e9c12660d3044bca2c0"
+checksum = "a4c43f06adaabc8e9122e578acb218e47e8ddc924efbffc055f31d48a8032bcd"
 dependencies = [
  "anyhow",
  "bitmatch",
@@ -692,6 +692,7 @@ dependencies = [
  "cortex-m 0.6.7",
  "serde",
  "structopt",
+ "thiserror",
 ]
 
 [[package]]

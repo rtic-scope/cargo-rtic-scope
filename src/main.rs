@@ -417,7 +417,10 @@ fn run_loop(
         // Try to decode the packet.
         stats.packets = stats.packets + 1;
         if let Err(ref malformed) = data {
-            log::warn(format!("failed to decode an ITM packet: {:?}", malformed));
+            log::warn(format!(
+                "failed to decode an ITM packet: {}: {:?}",
+                malformed, malformed
+            ));
             stats.malformed = stats.malformed + 1;
         }
 
