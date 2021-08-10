@@ -280,7 +280,7 @@ fn main_try() -> Result<(), RTICScopeError> {
     log::status(
         "Recovered",
         format!(
-            "{ntotal} task(s) from {prog}: {nhard} hard, {nsoft} soft. Target reset.",
+            "{ntotal} task(s) from {prog}: {nhard} hard, {nsoft} soft. Target reset and flashed.",
             ntotal = metadata.hardware_tasks() + metadata.software_tasks(),
             prog = artifact.target.name,
             nhard = metadata.hardware_tasks(),

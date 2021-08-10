@@ -20,7 +20,7 @@ pub enum SinkError {
     DrainSerError(#[from] serde_json::Error),
     #[error("Failed to drain trace data on I/O: {0}")]
     DrainIOError(#[source] std::io::Error),
-    #[error("Failed to associate RTIC information to some packets before drain:\n{}", Self::format_unmappable(.0))]
+    #[error("Failed to associate RTIC information to some trace packets: {}", Self::format_unmappable(.0))]
     ResolveError(Vec<(itm_decode::TracePacket, Option<String>)>),
     #[error("Failed to reset target device: {0}")]
     ResetError(#[from] probe_rs::Error),
@@ -44,7 +44,7 @@ impl SinkError {
                 )
             })
             .collect::<Vec<_>>()
-            .join("\n")
+            .join(";\n")
     }
 }
 
