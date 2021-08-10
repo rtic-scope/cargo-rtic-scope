@@ -18,7 +18,7 @@ fn main() -> Result<()> {
     let mut prev_nanos = 0;
     for chunk in stream {
         let chunk = chunk.context("Failed to deserialize chunk")?;
-        let nanos = chunk.timestamp.timestamp_nanos();
+        let nanos = chunk.timestamp.ts.timestamp_nanos();
         let diff = nanos - prev_nanos;
         eprintln!("@{} ns (+{} ns): {:?}", nanos, diff, chunk.events);
         prev_nanos = nanos;
