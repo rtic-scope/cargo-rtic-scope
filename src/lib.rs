@@ -69,10 +69,13 @@ pub enum EventType {
         action: TaskAction,
     },
 
-    /// Target emitted package for which no RTIC information could be
-    /// associated. Optional string describes why a packet information
-    /// could not be mapped.
-    Unknown(TracePacket, Option<String>),
+    /// RTIC Scope does not know how to map this packet.
+    Unknown(TracePacket),
 
+    /// RTIC Scope knows how to map this packet, but recovered
+    /// translation maps does not contain the correct information.
+    Unmappable(TracePacket, String),
+
+    /// Packet could not be decoded.
     Invalid(MalformedPacket),
 }
