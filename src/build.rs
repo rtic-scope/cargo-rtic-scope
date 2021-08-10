@@ -136,7 +136,7 @@ impl CargoWrapper {
             cargo.arg(self.target_dir());
         }
 
-        cargo.arg("--message-format=json");
+        cargo.args(&["--message-format", "json-diagnostic-rendered-ansi"]);
         cargo.stdout(Stdio::piped());
 
         // Dirty fix for evading any eventual .cargo/config in the working
