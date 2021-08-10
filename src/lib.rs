@@ -10,7 +10,7 @@ use itm_decode::{TracePacket, MalformedPacket, TimestampDataRelation};
 
 /// Derivative of [itm_decode::Timestamp]; an absolute timestamp `ts`
 /// replaces `base` and `delta`.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Timestamp {
     /// Absolute timestamp value
     pub ts: chrono::DateTime<Local>,
@@ -27,7 +27,7 @@ pub struct Timestamp {
 
 /// A set of events that occurred at a certain timepoint during target
 /// execution.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EventChunk {
     /// Collective timestamp for the chunk of [EventChunk::events].
     pub timestamp: Timestamp,
@@ -37,7 +37,7 @@ pub struct EventChunk {
 }
 
 /// Verbatim copy of [ExceptionAction], sans the enum name.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TaskAction {
     /// Task was entered.
     Entered,
@@ -51,7 +51,7 @@ pub enum TaskAction {
 
 /// Derivative of [TracePacket], where RTIC task information has
 /// been resolved.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum EventType {
     /// Equivalent to [TracePacket::Overflow].
     Overflow,
