@@ -167,6 +167,15 @@ impl Metadata {
             }
         }
 
+        // map malformed packets
+        events.append(
+            &mut packets
+                .malformed_packets
+                .iter()
+                .map(|m| EventType::Invalid(m.to_owned()))
+                .collect(),
+        );
+
         EventChunk { timestamp, events }
     }
 }

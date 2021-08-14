@@ -220,9 +220,8 @@ impl Iterator for TTYSource {
             };
 
             match self.decoder.pull_with_timestamp() {
-                Ok(None) => continue,
-                Ok(Some(packets)) => return Some(Ok(Ok(packets))),
-                Err(malformed) => return Some(Ok(Err(malformed))),
+                None => continue,
+                Some(packets) => return Some(Ok(packets)),
             }
         }
 

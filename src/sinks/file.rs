@@ -108,7 +108,7 @@ impl FileSink {
 }
 
 impl Sink for FileSink {
-    fn drain(&mut self, data: TraceData, _: Option<api::EventChunk>) -> Result<(), SinkError> {
+    fn drain(&mut self, data: TraceData, _: api::EventChunk) -> Result<(), SinkError> {
         let json = serde_json::to_string(&data)?;
         self.file
             .write_all(json.as_bytes())

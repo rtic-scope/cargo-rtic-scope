@@ -17,12 +17,8 @@ impl FrontendSink {
 }
 
 impl Sink for FrontendSink {
-    fn drain(&mut self, data: TraceData, chunk: Option<api::EventChunk>) -> Result<(), SinkError> {
-        let json = match (data, chunk) {
-            (Err(malformed), None) => serde_json::to_string(&malformed)?,
-            (_, Some(chunk)) => serde_json::to_string(&chunk)?,
-            _ => unreachable!(),
-        };
+    fn drain(&mut self, _: TraceData, chunk: api::EventChunk) -> Result<(), SinkError> {
+        let json = serde_json::to_string(&chunk)?;
 
         self.socket
             .write_all(json.as_bytes())

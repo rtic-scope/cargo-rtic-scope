@@ -35,6 +35,6 @@ mod frontend;
 pub use frontend::FrontendSink;
 
 pub trait Sink {
-    fn drain(&mut self, data: TraceData, chunk: Option<api::EventChunk>) -> Result<(), SinkError>;
+    fn drain(&mut self, data: TraceData, chunk: api::EventChunk) -> Result<(), SinkError>;
     fn describe(&self) -> String;
 }

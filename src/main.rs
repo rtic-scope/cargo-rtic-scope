@@ -28,7 +28,7 @@ mod sources;
 
 use build::CargoWrapper;
 
-pub type TraceData = Result<itm_decode::TimestampedTracePackets, itm_decode::MalformedPacket>;
+pub type TraceData = itm_decode::TimestampedTracePackets;
 
 #[derive(Debug, StructOpt)]
 struct Opts {
@@ -381,7 +381,10 @@ fn run_loop(
 
     #[derive(Default)]
     struct Stats {
+        // How many ITM packets we have received from the source...
         pub packets: usize,
+
+        // ...of which, how many are malformed/nonmappable?
         pub malformed: usize,
         pub nonmappable: usize,
     }
@@ -414,44 +417,40 @@ fn run_loop(
             )
         })?;
 
-        // Try to decode the packet.
-        stats.packets = stats.packets + 1;
-        if let Err(ref malformed) = data {
-            log::err(format!("cannot decode ITM packet: {}: {:?}", malformed, malformed));
-            stats.malformed = stats.malformed + 1;
-        }
-
         // Try to recover RTIC information for the packets.
-        let chunk = if let Ok(ref packets) = data {
-            let chunk = metadata.build_event_chunk(packets.clone());
+        let chunk = metadata.build_event_chunk(data.clone());
 
-            // Report any unmappable/unknown events that occured
-            for event in chunk.events.iter() {
-                match event {
-                    api::EventType::Unmappable(ref packet, ref reason) => {
-                        stats.nonmappable = stats.nonmappable + 1;
-                        log::warn(format!(
-                            "cannot map {:?} packet: {}",
-                            packet, reason
-                        ));
-                    }
-                    api::EventType::Unknown(ref packet) => {
-                        stats.nonmappable = stats.nonmappable + 1;
-                        log::warn(format!(
-                            "cannot map {:?} packet",
-                            packet
-                        ));
-                    }
-                    api::EventType::Invalid(_) => (), // dont report decode errors twice
-                    api::EventType::Overflow => log::warn("Overflow detected! Packets may have been dropped and timestamps will be diverged until the next global timestamp".to_string()),
-                    _ => (),
+        // Report any unmappable/unknown events that occured, and record stats
+        //
+        // Count the event chunk as a single packets: each sufficient
+        // set of timestamp packets marks the end of an event (and the
+        // start of a new one), but we don't know how many timestamp
+        // packets were received.
+        stats.packets = stats.packets + 1;
+        for event in chunk.events.iter() {
+            match event {
+                api::EventType::Unmappable(ref packet, ref reason) => {
+                    stats.nonmappable = stats.nonmappable + 1;
+                    log::warn(format!(
+                        "cannot map {:?} packet: {}",
+                        packet, reason
+                    ));
                 }
+                api::EventType::Unknown(ref packet) => {
+                    stats.nonmappable = stats.nonmappable + 1;
+                    log::warn(format!(
+                        "cannot map {:?} packet",
+                        packet
+                    ));
+                }
+                api::EventType::Invalid(ref malformed) => {
+                    stats.malformed = stats.malformed + 1;
+                    log::err(format!("malformed ITM packet: {}: {:?}", malformed, malformed));
+                },
+                api::EventType::Overflow => log::warn("Overflow detected! Packets may have been dropped and timestamps will be diverged until the next global timestamp".to_string()),
+                _ => stats.packets = stats.packets + 1,
             }
-
-            Some(chunk)
-        } else {
-            None
-        };
+        }
 
         for (sink, is_broken) in sinks.iter_mut() {
             if let Err(e) = sink.drain(data.clone(), chunk.clone()) {
@@ -480,7 +479,7 @@ fn run_loop(
                 Command::Replay(_) => "Replaying",
             },
             format!(
-                "{}: {} packets processed in {time} (~{packets_per_sec} packets/s, {} malformed, {} non-mappable); {sinks}...",
+                "{}: >{} packets processed in {time} (~{packets_per_sec} packets/s; {} malformed, {} non-mappable); {sinks}...",
                 prog,
                 stats.packets,
                 stats.malformed,
