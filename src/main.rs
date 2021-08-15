@@ -421,12 +421,7 @@ fn run_loop(
         let chunk = metadata.build_event_chunk(data.clone());
 
         // Report any unmappable/unknown events that occured, and record stats
-        //
-        // Count the event chunk as a single packets: each sufficient
-        // set of timestamp packets marks the end of an event (and the
-        // start of a new one), but we don't know how many timestamp
-        // packets were received.
-        stats.packets = stats.packets + 1;
+        stats.packets = stats.packets + data.packets_consumed;
         for event in chunk.events.iter() {
             match event {
                 api::EventType::Unmappable(ref packet, ref reason) => {
@@ -448,7 +443,7 @@ fn run_loop(
                     log::err(format!("malformed ITM packet: {}: {:?}", malformed, malformed));
                 },
                 api::EventType::Overflow => log::warn("Overflow detected! Packets may have been dropped and timestamps will be diverged until the next global timestamp".to_string()),
-                _ => stats.packets = stats.packets + 1,
+                _ => (),
             }
         }
 
@@ -479,7 +474,7 @@ fn run_loop(
                 Command::Replay(_) => "Replaying",
             },
             format!(
-                "{}: >{} packets processed in {time} (~{packets_per_sec} packets/s; {} malformed, {} non-mappable); {sinks}...",
+                "{}: {} packets processed in {time} (~{packets_per_sec} packets/s; {} malformed, {} non-mappable); {sinks}...",
                 prog,
                 stats.packets,
                 stats.malformed,
