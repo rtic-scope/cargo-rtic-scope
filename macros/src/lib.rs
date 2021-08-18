@@ -27,7 +27,7 @@ pub fn trace(_attrs: TokenStream, item: TokenStream) -> TokenStream {
         // TODO do not write 4 bytes. That denotes a trace clock
         // frequency.
         let trace_stmt = syn::parse2::<Stmt>(quote!(
-            ::rtic_trace::__write_trace_payload(#task_id);
+            ::cortex_m_rtic_trace::__write_trace_payload(#task_id);
         ))
         .unwrap();
         let mut stmts = vec![trace_stmt.clone()];
