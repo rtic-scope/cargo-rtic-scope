@@ -138,6 +138,7 @@ impl CargoWrapper {
 
         cargo.args(&["--message-format", "json-diagnostic-rendered-ansi"]);
         cargo.stdout(Stdio::piped());
+        cargo.stderr(Stdio::piped());
 
         // Dirty fix for evading any eventual .cargo/config in the working
         // directory. We obviously need it when we build the target
@@ -163,17 +164,17 @@ impl CargoWrapper {
             .spawn()
             .map_err(|e| CargoError::CargoBuildSpawnWaitError(e))?;
         let stdout = BufReader::new(child.stdout.take().expect("Pipe to cargo process failed"));
+        let stderr = BufReader::new(child.stderr.take().expect("Pipe to cargo process failed"));
 
         // NOTE(collect) ensure we don't block stdout which could
         // prevent the process from exiting
-        let messages = Message::parse_stream(stdout).collect::<Vec<_>>();
+        let messages = Message::parse_stream(stdout)
+            .chain(Message::parse_stream(stderr))
+            .collect::<Vec<_>>();
 
         let status = child
             .wait()
             .map_err(|e| CargoError::CargoBuildSpawnWaitError(e))?;
-        if !status.success() {
-            return Err(CargoError::CargoBuildExecFailed(status, opts));
-        }
 
         let mut target_artifact: Option<Artifact> = None;
         for message in messages {
@@ -196,6 +197,10 @@ impl CargoWrapper {
                 }
                 _ => (),
             }
+        }
+
+        if !status.success() {
+            return Err(CargoError::CargoBuildExecFailed(status, opts));
         }
 
         if target_artifact.is_none() {
