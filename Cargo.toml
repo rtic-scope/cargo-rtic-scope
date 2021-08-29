@@ -32,13 +32,11 @@ crossterm = "0.20"
 
 [dependencies.probe-rs]
 version = "0.11"
-git = "https://github.com/rtic-scope/probe-rs.git"
-rev = "b82c4a4845240833a76e299f4775680d04a87692"
+git = "https://github.com/probe-rs/probe-rs.git"
 
 [dependencies.probe-rs-cli-util]
 version = "0.11"
-git = "https://github.com/rtic-scope/probe-rs.git"
-rev = "b82c4a4845240833a76e299f4775680d04a87692"
+git = "https://github.com/probe-rs/probe-rs.git"
 
 [dependencies.anyhow]
 version = "1"
