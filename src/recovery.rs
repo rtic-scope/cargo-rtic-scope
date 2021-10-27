@@ -378,32 +378,35 @@ impl<'a> TaskResolver<'a> {
         };
 
         // Find the bound exceptions from the #[task(bound = ...)]
-        // arguments. Further, partition internal and external interrupts.
+        // arguments. Further, partition internal and external
+        // interrupts. List of already known exceptions is extracted
+        // from the ARMv7-M arch. reference manual, table B1-4.
         //
         // For external exceptions (those defined in PAC::Interrupt), we
         // need to resolve the number we receive over ITM back to the
         // interrupt name. For internal interrupts, the name of the
-        // execption is received over ITM.
+        // exception is received over ITM.
+        let known_exceptions = [
+            "Reset",
+            "NMI",
+            "HardFault",
+            "MemManage",
+            "BusFault",
+            "UsageFault",
+            "SVCall",
+            "DebugMonitor",
+            "PendSV",
+            "SysTick",
+        ];
         let (int_binds, ext_binds): (Vec<Ident>, Vec<Ident>) = app
             .hardware_tasks
             .iter()
             .map(|(_name, hwt)| hwt.args.binds.clone())
             .partition(|bind| {
-                [
-                    "Reset",
-                    "NMI",
-                    "HardFault",
-                    "MemManage",
-                    "BusFault",
-                    "UsageFault",
-                    "SVCall",
-                    "DebugMonitor",
-                    "PendSV",
-                    "SysTick",
-                ]
-                .iter()
-                .find(|&&int| int == bind.to_string())
-                .is_some()
+                known_exceptions
+                    .iter()
+                    .find(|&&int| int == bind.to_string())
+                    .is_some()
             });
         let binds = ext_binds.clone();
 
