@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use syn;
 use thiserror::Error;
 
-type HwExceptionNumber = u8;
+type HwExceptionNumber = u16;
 type SwExceptionNumber = usize;
 type ExceptionIdent = String;
 type TaskIdent = [String; 2];
@@ -33,7 +33,7 @@ pub enum RecoveryError {
     #[error("The IRQ ({0:?}) -> RTIC task mapping does not exist")]
     MissingHWLabelExceptionMap(itm_decode::cortex_m::Exception),
     #[error("The IRQ ({0}) -> RTIC task mapping does not exist")]
-    MissingHWExceptionMap(u8),
+    MissingHWExceptionMap(HwExceptionNumber),
     #[error("Failed to read artifact source file: {0}")]
     SourceRead(#[source] std::io::Error),
     #[error("Failed to tokenize artifact source file: {0}")]
@@ -133,8 +133,8 @@ impl Metadata {
                     let (fun, _bind) = self
                         .maps
                         .interrupts
-                        .get(&irqn)
-                        .ok_or(RecoveryError::MissingHWExceptionMap(irqn))?;
+                        .get(&irqn.into())
+                        .ok_or(RecoveryError::MissingHWExceptionMap(irqn.into()))?;
                     Ok(fun.join("::"))
                 }
             }
@@ -409,7 +409,7 @@ impl<'a> TaskResolver<'a> {
 
         // Resolve exception numbers from bound idents
         let excpt_nrs = if ext_binds.is_empty() {
-            BTreeMap::<Ident, u8>::new()
+            BTreeMap::<Ident, HwExceptionNumber>::new()
         } else {
             self.resolve_int_nrs(&binds)?
         };
@@ -446,7 +446,7 @@ impl<'a> TaskResolver<'a> {
         Ok((int_assocs, ext_assocs))
     }
 
-    fn resolve_int_nrs(&self, binds: &[Ident]) -> Result<BTreeMap<Ident, u8>, RecoveryError> {
+    fn resolve_int_nrs(&self, binds: &[Ident]) -> Result<BTreeMap<Ident, HwExceptionNumber>, RecoveryError> {
         const ADHOC_FUNC_PREFIX: &str = "rtic_scope_func_";
 
         // Extract adhoc source to a temporary directory and apply adhoc
@@ -501,8 +501,8 @@ impl<'a> TaskResolver<'a> {
                 let int_ident = format_ident!("{}", bind);
                 let fun = quote!(
                     #[no_mangle]
-                    pub extern fn #fun() -> u8 {
-                        Interrupt::#int_ident.nr()
+                    pub extern fn #fun() -> u16 {
+                        Interrupt::#int_ident.number()
                     }
                 );
                 src.write_all(format!("\n{}\n", fun).as_bytes())
@@ -511,15 +511,20 @@ impl<'a> TaskResolver<'a> {
         }
 
         // Build the adhoc library, load it, and resolve all exception idents
-        let artifact = self.cargo.build(&target_dir, None, "cdylib")?;
+        let artifact = self.cargo.build(
+            &target_dir,
+            // Host target triple need not be specified when CARGO is set.
+            None,
+            "cdylib",
+        )?;
         let lib = unsafe {
             libloading::Library::new(artifact.filenames.first().unwrap())
                 .map_err(|e| RecoveryError::LibLoadFail(e))?
         };
-        let binds: Result<Vec<(proc_macro2::Ident, u8)>, RecoveryError> = binds
+        let binds: Result<Vec<(proc_macro2::Ident, HwExceptionNumber)>, RecoveryError> = binds
             .into_iter()
             .map(|b| {
-                let func: libloading::Symbol<extern "C" fn() -> u8> = unsafe {
+                let func: libloading::Symbol<extern "C" fn() -> HwExceptionNumber> = unsafe {
                     lib.get(format!("{}{}", ADHOC_FUNC_PREFIX, b).as_bytes())
                         .map_err(|e| RecoveryError::LibLookupFail(e))?
                 };
