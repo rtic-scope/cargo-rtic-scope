@@ -180,7 +180,7 @@ impl diag::DiagnosableError for RTICScopeError {
 
 impl RTICScopeError {
     pub fn render(&self) {
-        log::err(format!("{}", self));
+        log::err(format!("{:?}", self));
 
         // print eventual hints
         use crate::diag::DiagnosableError;
