@@ -9,7 +9,7 @@ use std::io::Write;
 
 use cargo_metadata::Artifact;
 use chrono::Local;
-use include_dir::include_dir;
+use include_dir::{include_dir, dir::ExtractMode};
 use itm_decode::{ExceptionAction, TimestampedTracePackets, TracePacket};
 use libloading;
 use proc_macro2::{Ident, TokenStream, TokenTree};
@@ -453,7 +453,7 @@ impl<'a> TaskResolver<'a> {
         // modifications.
         let target_dir = self.cargo.target_dir().join("cargo-rtic-trace-libadhoc");
         include_dir!("assets/libadhoc")
-            .extract(&target_dir)
+            .extract(&target_dir, ExtractMode::Overwrite)
             .map_err(|e| RecoveryError::LibExtractFail(e))?;
         // NOTE See <https://github.com/rust-lang/cargo/issues/9643>
         fs::rename(
