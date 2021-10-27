@@ -41,10 +41,8 @@ impl PACPropertiesIntermediate {
         if self.interrupt_path.is_none() {
             self.interrupt_path = other.interrupt_path;
         }
-        match (self.features.as_mut(), other.features) {
-            (None, Some(feats)) => self.features = Some(feats),
-            (Some(feats), Some(mut ofeats)) => feats.append(&mut ofeats),
-            _ => (),
+        if self.features.is_none() {
+            self.features = other.features;
         }
     }
 }
@@ -127,9 +125,7 @@ impl PACProperties {
             int.interrupt_path = Some(intp.to_owned());
         }
         if let Some(feats) = &opts.features {
-            int.features
-                .get_or_insert(feats.clone())
-                .append(&mut feats.clone());
+            int.features = Some(feats.to_owned());
         }
 
         int.try_into()
