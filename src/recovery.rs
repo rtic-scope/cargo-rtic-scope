@@ -488,7 +488,8 @@ impl<'a> TaskResolver<'a> {
                 .append(true)
                 .open(target_dir.join("src/lib.rs"))
                 .map_err(|e| RecoveryError::LibExtractFail(e))?;
-            let import = &self.pacp.interrupt_path;
+            let import = str::parse::<TokenStream>(&self.pacp.interrupt_path)
+                .expect("Failed to tokenize pacp.interrupt_path");
             let import = quote!(use #import;);
             src.write_all(format!("\n{}\n", import).as_bytes())
                 .map_err(|e| RecoveryError::LibExtractFail(e))?;
