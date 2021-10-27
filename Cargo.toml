@@ -13,7 +13,7 @@ description = "RTIC Scope backend"
 [dependencies]
 structopt = "0.3"
 clap = "2.33"
-cargo_metadata = "0.11"
+cargo_metadata = "0.14"
 syn = "1"
 proc-macro2 = "1"
 quote = "1"

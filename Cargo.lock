@@ -217,7 +217,7 @@ name = "cargo-rtic-scope"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "cargo_metadata 0.11.4",
+ "cargo_metadata",
  "chrono",
  "clap",
  "colored",
@@ -241,17 +241,6 @@ dependencies = [
  "syn",
  "tempfile",
  "thiserror",
-]
-
-[[package]]
-name = "cargo_metadata"
-version = "0.11.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3a567c24b86754d629addc2db89e340ac9398d07b5875efcff837e3878e17ec"
-dependencies = [
- "semver 0.10.0",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -1067,7 +1056,7 @@ version = "0.11.0"
 source = "git+https://github.com/probe-rs/probe-rs.git#d2b13bf47507c85fbccdb170a4c3bcac86985613"
 dependencies = [
  "anyhow",
- "cargo_metadata 0.14.0",
+ "cargo_metadata",
  "cargo_toml",
  "colored",
  "dunce",
@@ -1294,16 +1283,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d7eb9ef2c18661902cc47e535f9bc51b78acd254da71d375c2f6720d9a40403"
 dependencies = [
  "semver-parser",
-]
-
-[[package]]
-name = "semver"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "394cec28fa623e00903caf7ba4fa6fb9a0e260280bb8cdbbba029611108a0190"
-dependencies = [
- "semver-parser",
- "serde",
 ]
 
 [[package]]

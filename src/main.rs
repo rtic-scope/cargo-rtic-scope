@@ -241,6 +241,7 @@ fn main_try() -> Result<(), RTICScopeError> {
 
     // Build RTIC application to be traced, and create a wrapper around
     // cargo, reusing the target directory of the application.
+    log::status("Building", "RTIC target application...".to_string());
     let (cargo, artifact) = CargoWrapper::new(
         &env::current_dir()?,
         {
@@ -252,11 +253,7 @@ fn main_try() -> Result<(), RTICScopeError> {
         .to_cargo_options(),
     )?;
 
-    let prog = format!(
-        "{} ({})",
-        artifact.target.name,
-        artifact.target.src_path.display()
-    );
+    let prog = format!("{} ({})", artifact.target.name, artifact.target.src_path,);
     log::status(
         "Recovering",
         format!("metadata for {} and preparing target...", prog,),
@@ -579,8 +576,13 @@ fn trace(
     let flashloader = opts
         .flash_options
         .probe_options
-        .build_flashloader(&mut session, &elf)?;
-    flash::run_flash_download(&mut session, &elf, &opts.flash_options, flashloader)?;
+        .build_flashloader(&mut session, &elf.clone().into_std_path_buf())?;
+    flash::run_flash_download(
+        &mut session,
+        &elf.clone().into_std_path_buf(),
+        &opts.flash_options,
+        flashloader,
+    )?;
 
     let mut trace_source: Box<dyn sources::Source> = if let Some(dev) = &opts.serial {
         Box::new(sources::TTYSource::new(

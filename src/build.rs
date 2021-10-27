@@ -92,7 +92,7 @@ impl CargoWrapper {
         Ok((
             CargoWrapper {
                 target_dir: Some(metadata.target_directory.clone().canonicalize().map_err(
-                    |e| CargoError::CannotCanonicalize(metadata.target_directory.clone(), e),
+                    |e| CargoError::CannotCanonicalize(metadata.target_directory.clone().into(), e),
                 )?),
                 app_metadata: Some(metadata),
             },
@@ -136,7 +136,7 @@ impl CargoWrapper {
             cargo.arg(self.target_dir());
         }
 
-        cargo.args(&["--message-format", "json-diagnostic-rendered-ansi"]);
+        cargo.arg("--message-format=json-diagnostic-rendered-ansi");
         cargo.stdout(Stdio::piped());
         cargo.stderr(Stdio::piped());
 
@@ -166,15 +166,7 @@ impl CargoWrapper {
         let stdout = BufReader::new(child.stdout.take().expect("Pipe to cargo process failed"));
         let stderr = BufReader::new(child.stderr.take().expect("Pipe to cargo process failed"));
 
-        // NOTE(collect) ensure we don't block stdout which could
-        // prevent the process from exiting
-        let messages = Message::parse_stream(stdout)
-            .chain(Message::parse_stream(stderr))
-            .collect::<Vec<_>>();
-
-        let status = child
-            .wait()
-            .map_err(|e| CargoError::CargoBuildSpawnWaitError(e))?;
+        let messages = Message::parse_stream(stdout).chain(Message::parse_stream(stderr));
 
         let mut target_artifact: Option<Artifact> = None;
         for message in messages {
@@ -198,6 +190,10 @@ impl CargoWrapper {
                 _ => (),
             }
         }
+
+        let status = child
+            .wait()
+            .map_err(|e| CargoError::CargoBuildSpawnWaitError(e))?;
 
         if !status.success() {
             return Err(CargoError::CargoBuildExecFailed(status, opts));
@@ -227,7 +223,7 @@ fn find_manifest_path(artifact: &cargo_metadata::Artifact) -> Result<PathBuf, Ca
             path.push("Cargo.toml");
             path.exists()
         } {
-            return Ok(path);
+            return Ok(path.into());
         } else {
             path.pop(); // remove Cargo.toml
             if path.pop() {
@@ -235,7 +231,7 @@ fn find_manifest_path(artifact: &cargo_metadata::Artifact) -> Result<PathBuf, Ca
                 continue;
             }
 
-            return Err(CargoError::CannotFindManifest(start_path()));
+            return Err(CargoError::CannotFindManifest(start_path().into()));
         }
     }
 }

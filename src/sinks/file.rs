@@ -39,7 +39,7 @@ impl FileSink {
 
         // generate a short descroption on the format
         // "blinky-gbaadf00-dirty-2021-06-16T17:13:16.trace"
-        let repo = find_git_repo(artifact.target.src_path.clone())?;
+        let repo = find_git_repo(artifact.target.src_path.clone().into())?;
         let git_shortdesc = repo
             .describe(&DescribeOptions::new().show_commit_oid_as_fallback(true))?
             .format(Some(
