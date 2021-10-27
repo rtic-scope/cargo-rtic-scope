@@ -468,8 +468,9 @@ impl<'a> TaskResolver<'a> {
                 .open(target_dir.join("Cargo.toml"))
                 .map_err(|e| RecoveryError::LibExtractFail(e))?;
             let dep = format!(
-                "\n{} = {{ version = \"\", features = [{}]}}\n",
+                "\n{} = {{ version = \"{}\", features = [{}]}}\n",
                 self.pacp.name,
+                self.pacp.version,
                 self.pacp
                     .features
                     .iter()

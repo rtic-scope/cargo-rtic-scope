@@ -14,6 +14,8 @@ struct PACPropertiesIntermediate {
     pub name: Option<String>,
     #[serde(rename = "pac_features")]
     pub features: Option<Vec<String>>,
+    #[serde(rename = "pac_version")]
+    pub version: Option<String>,
     pub interrupt_path: Option<String>,
 }
 
@@ -22,6 +24,7 @@ impl Default for PACPropertiesIntermediate {
         Self {
             name: None,
             features: None,
+            version: None,
             interrupt_path: None,
         }
     }
@@ -31,6 +34,9 @@ impl PACPropertiesIntermediate {
     pub fn complete_with(&mut self, other: Self) {
         if self.name.is_none() {
             self.name = other.name;
+        }
+        if self.version.is_none() {
+            self.version = other.version;
         }
         if self.interrupt_path.is_none() {
             self.interrupt_path = other.interrupt_path;
@@ -46,6 +52,7 @@ impl PACPropertiesIntermediate {
 #[derive(Debug)]
 pub struct PACProperties {
     pub name: String,
+    pub version: String,
     pub features: Vec<String>,
     pub interrupt_path: String,
 }
@@ -56,6 +63,8 @@ pub enum PACMetadataError {
     DeserializationFailed(#[from] serde_json::Error),
     #[error("Manifest metadata is missing PAC name")]
     MissingName,
+    #[error("Manifest metadata is missing PAC version")]
+    MissingVersion,
     #[error("Manifest metadata is missing PAC interrupt path")]
     MissingInterruptPath,
 }
@@ -63,7 +72,8 @@ pub enum PACMetadataError {
 impl diag::DiagnosableError for PACMetadataError {
     fn diagnose(&self) -> Vec<String> {
         match self {
-            Self::MissingName => vec!["Add `name = \"your PAC name\"` to [package.metadata.rtic-scope] in Cargo.toml".into()],
+            Self::MissingName => vec!["Add `pac = \"your PAC name\"` to [package.metadata.rtic-scope] in Cargo.toml".into()],
+            Self::MissingVersion => vec!["Add `pac_version = \"your PAC version\"` to [package.metadata.rtic-scope] in Cargo.toml".into()],
             Self::MissingInterruptPath => vec!["Add `interrupt_path = \"path to your PAC's Interrupt enum\"` to [package.metadata.rtic-scope] in Cargo.toml".into()],
             _ => vec![],
         }
@@ -76,6 +86,7 @@ impl TryInto<PACProperties> for PACPropertiesIntermediate {
     fn try_into(self) -> Result<PACProperties, Self::Error> {
         Ok(PACProperties {
             name: self.name.ok_or(Self::Error::MissingName)?,
+            version: self.version.ok_or(Self::Error::MissingVersion)?,
             interrupt_path: self
                 .interrupt_path
                 .ok_or(Self::Error::MissingInterruptPath)?,
@@ -108,6 +119,9 @@ impl PACProperties {
         // Complete/override with opts
         if let Some(pac) = &opts.name {
             int.name = Some(pac.to_owned());
+        }
+        if let Some(version) = &opts.version {
+            int.version = Some(version.to_owned());
         }
         if let Some(intp) = &opts.interrupt_path {
             int.interrupt_path = Some(intp.to_owned());

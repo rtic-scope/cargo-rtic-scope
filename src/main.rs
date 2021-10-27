@@ -78,6 +78,10 @@ pub struct PACOptions {
     #[structopt(long = "pac", name = "pac")]
     name: Option<String>,
 
+    /// Version of the PAC used in the traced application.
+    #[structopt(long = "pac-version", name = "pac-version")]
+    version: Option<String>,
+
     /// Features of the PAC used in traced application.
     #[structopt(long = "pac-features", name = "pac-features")]
     features: Option<Vec<String>>,
