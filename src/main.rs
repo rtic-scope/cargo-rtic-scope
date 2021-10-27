@@ -62,6 +62,10 @@ struct TraceOptions {
     #[structopt(long = "clear-traces")]
     remove_prev_traces: bool,
 
+    /// Only resolve the translation maps; do not program or trace the target.
+    #[structopt(long = "resolve-only")]
+    resolve_only: bool,
+
     #[structopt(flatten)]
     pac: PACOptions,
 
@@ -548,13 +552,19 @@ fn trace(
     cargo: &CargoWrapper,
     artifact: &Artifact,
 ) -> Result<Option<TraceTuple>, RTICScopeError> {
+    let maps = resolve_maps(cargo, &opts.pac, artifact)?;
+    if opts.resolve_only {
+        println!("{}", maps);
+        return Ok(None);
+    }
+
     let mut session = opts
         .flash_options
         .probe_options
         .simple_attach()
         .context("Failed to attach to target session")?;
 
-    // TODO make this into Sink::generate().remove_old(), etc.
+    // TODO make this into Sink::generate().remove_old(), etc.?
     let mut trace_sink = sinks::FileSink::generate_trace_file(
         &artifact,
         opts.trace_dir
@@ -563,8 +573,6 @@ fn trace(
         opts.remove_prev_traces,
     )
     .context("Failed to generate trace sink file")?;
-
-    let maps = resolve_maps(cargo, &opts.pac, artifact)?;
 
     // Flash binary to target
     let elf = artifact.executable.as_ref().unwrap();
