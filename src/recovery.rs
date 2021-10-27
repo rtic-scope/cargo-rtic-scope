@@ -9,7 +9,7 @@ use std::io::Write;
 
 use cargo_metadata::Artifact;
 use chrono::Local;
-use include_dir::{include_dir, dir::ExtractMode};
+use include_dir::{dir::ExtractMode, include_dir};
 use itm_decode::{ExceptionAction, TimestampedTracePackets, TracePacket};
 use libloading;
 use proc_macro2::{Ident, TokenStream, TokenTree};
@@ -449,7 +449,10 @@ impl<'a> TaskResolver<'a> {
         Ok((int_assocs, ext_assocs))
     }
 
-    fn resolve_int_nrs(&self, binds: &[Ident]) -> Result<BTreeMap<Ident, HwExceptionNumber>, RecoveryError> {
+    fn resolve_int_nrs(
+        &self,
+        binds: &[Ident],
+    ) -> Result<BTreeMap<Ident, HwExceptionNumber>, RecoveryError> {
         const ADHOC_FUNC_PREFIX: &str = "rtic_scope_func_";
 
         // Extract adhoc source to a temporary directory and apply adhoc
