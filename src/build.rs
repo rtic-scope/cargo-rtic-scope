@@ -47,12 +47,11 @@ impl CargoError {
 impl diag::DiagnosableError for CargoError {
     fn diagnose(&self) -> Vec<String> {
         match self {
-            CargoError::MultipleSuitableArtifacts(kind, opts) => vec![
-                format!("Modify `cargo build {}` so that only one {}-crate is built. Try --bin or --example.", Self::maybe_opts_to_str(opts), kind)
-            ],
-            CargoError::NoSuitableArtifact(kind, opts) => vec![
-                format!("Modify `cargo build {}` so that a {}-crate is built. Try --bin or --example.", Self::maybe_opts_to_str(opts), kind)
-            ],
+            CargoError::MultipleSuitableArtifacts(kind, _opts)
+            | CargoError::NoSuitableArtifact(kind, _opts) => vec![format!(
+                "Modify your call so that only one {}-crate is built. Try --bin or --example.",
+                kind
+            )],
             _ => vec![],
         }
     }
