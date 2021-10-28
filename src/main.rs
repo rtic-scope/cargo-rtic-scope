@@ -152,7 +152,6 @@ enum Command {
 #[derive(Debug, Error)]
 pub enum RTICScopeError {
     // adhoc errors
-    // TODO remove?
     #[error("Probe setup and/or initialization failed: {0}")]
     CommonProbeOperationError(#[from] probe_rs_cli_util::common_options::OperationError),
     #[error("I/O operation failed: {0}")]
@@ -170,6 +169,7 @@ pub enum RTICScopeError {
     #[error(transparent)]
     SinkError(#[from] sinks::SinkError),
 
+    // everything else
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
@@ -188,9 +188,10 @@ impl diag::DiagnosableError for RTICScopeError {
 
 impl RTICScopeError {
     pub fn render(&self) {
-        log::err(format!("{:?}", self));
+        log::err(format!("{}", self)); // XXX only prints top-level error
 
         // print eventual hints
+        // XXX should we anyhow::Error::downcast somehow instead?
         use crate::diag::DiagnosableError;
         type DE = dyn DiagnosableError;
         for hint in self.diagnose().iter().chain(
@@ -536,10 +537,7 @@ fn resolve_maps(
     let pacp = pacp::PACProperties::new(cargo, pac)?;
 
     // Map IRQ numbers and DWT matches to their respective RTIC tasks
-    let maps = recovery::TaskResolver::new(artifact, cargo, pacp)
-        .context("Failed to parse RTIC application source file")?
-        .resolve()
-        .context("Failed to resolve tasks")?;
+    let maps = recovery::TaskResolver::new(artifact, cargo, pacp)?.resolve()?;
 
     Ok(maps)
 }
