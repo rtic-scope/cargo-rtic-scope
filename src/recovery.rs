@@ -1,6 +1,6 @@
 use crate::build::{self, CargoWrapper};
 use crate::diag;
-use crate::pacp::PACProperties;
+use crate::manifest::ManifestProperties;
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -222,14 +222,14 @@ pub struct TaskResolver<'a> {
     cargo: &'a CargoWrapper,
     app: TokenStream,
     app_args: TokenStream,
-    pacp: PACProperties,
+    pacp: ManifestProperties,
 }
 
 impl<'a> TaskResolver<'a> {
     pub fn new(
         artifact: &Artifact,
         cargo: &'a CargoWrapper,
-        pacp: PACProperties,
+        pacp: ManifestProperties,
     ) -> Result<Self, RecoveryError> {
         // parse the RTIC app from the source file
         let src = fs::read_to_string(&artifact.target.src_path)

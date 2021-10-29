@@ -1,5 +1,5 @@
 use crate::sources::{Source, SourceError};
-use crate::PACOptions;
+use crate::ManifestOptions;
 use crate::TraceData;
 
 use itm_decode::{Decoder, DecoderOptions};
@@ -11,7 +11,7 @@ pub struct ProbeSource {
 }
 
 impl ProbeSource {
-    pub fn new(mut session: Session, opts: &PACOptions) -> Result<Self, SourceError> {
+    pub fn new(mut session: Session, opts: &ManifestOptions) -> Result<Self, SourceError> {
         // Configure probe and target for tracing
         //
         // NOTE(unwrap) --tpiu-freq is a requirement to enter this

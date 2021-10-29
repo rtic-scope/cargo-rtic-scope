@@ -1,6 +1,6 @@
 use crate::build::CargoWrapper;
 use crate::diag;
-use crate::PACOptions;
+use crate::ManifestOptions;
 
 use std::convert::TryInto;
 
@@ -9,7 +9,7 @@ use serde_json;
 use thiserror::Error;
 
 #[derive(Deserialize, Debug)]
-struct PACPropertiesIntermediate {
+struct ManifestPropertiesIntermediate {
     pub pac_name: Option<String>,
     pub pac_features: Option<Vec<String>>,
     pub pac_version: Option<String>,
@@ -18,7 +18,7 @@ struct PACPropertiesIntermediate {
     pub tpiu_baud: Option<u32>,
 }
 
-impl Default for PACPropertiesIntermediate {
+impl Default for ManifestPropertiesIntermediate {
     fn default() -> Self {
         Self {
             pac_name: None,
@@ -31,7 +31,7 @@ impl Default for PACPropertiesIntermediate {
     }
 }
 
-impl PACPropertiesIntermediate {
+impl ManifestPropertiesIntermediate {
     pub fn complete_with(&mut self, other: Self) {
         if self.pac_name.is_none() {
             self.pac_name = other.pac_name;
@@ -55,7 +55,7 @@ impl PACPropertiesIntermediate {
 }
 
 #[derive(Debug)]
-pub struct PACProperties {
+pub struct ManifestProperties {
     pub pac_name: String,
     pub pac_version: String,
     pub pac_features: Vec<String>,
@@ -65,7 +65,7 @@ pub struct PACProperties {
 }
 
 #[derive(Error, Debug)]
-pub enum PACMetadataError {
+pub enum ManifestMetadataError {
     #[error("Manifest metadata table could not be read: {0:?}")]
     DeserializationFailed(#[from] serde_json::Error),
     #[error("Manifest metadata is missing PAC name")]
@@ -80,7 +80,7 @@ pub enum PACMetadataError {
     MissingBaud,
 }
 
-impl diag::DiagnosableError for PACMetadataError {
+impl diag::DiagnosableError for ManifestMetadataError {
     fn diagnose(&self) -> Vec<String> {
         match self {
             Self::MissingName => vec!["Add `pac_name = \"<your PAC name>\"` to [package.metadata.rtic-scope] in Cargo.toml or specify --pac-name".into()],
@@ -93,11 +93,11 @@ impl diag::DiagnosableError for PACMetadataError {
     }
 }
 
-impl TryInto<PACProperties> for PACPropertiesIntermediate {
-    type Error = PACMetadataError;
+impl TryInto<ManifestProperties> for ManifestPropertiesIntermediate {
+    type Error = ManifestMetadataError;
 
-    fn try_into(self) -> Result<PACProperties, Self::Error> {
-        Ok(PACProperties {
+    fn try_into(self) -> Result<ManifestProperties, Self::Error> {
+        Ok(ManifestProperties {
             pac_name: self.pac_name.ok_or(Self::Error::MissingName)?,
             pac_version: self.pac_version.ok_or(Self::Error::MissingVersion)?,
             interrupt_path: self
@@ -110,8 +110,11 @@ impl TryInto<PACProperties> for PACPropertiesIntermediate {
     }
 }
 
-impl PACProperties {
-    pub fn new(cargo: &CargoWrapper, opts: &PACOptions) -> Result<Self, PACMetadataError> {
+impl ManifestProperties {
+    pub fn new(
+        cargo: &CargoWrapper,
+        opts: &ManifestOptions,
+    ) -> Result<Self, ManifestMetadataError> {
         let package_meta = cargo.package().unwrap().metadata.get("rtic-scope");
         let workspace_meta = cargo.metadata().workspace_metadata.get("rtic-scope");
 
@@ -120,15 +123,15 @@ impl PACProperties {
         // Read from cargo manifest
         let mut int = match (package_meta, workspace_meta) {
             (Some(pkg), Some(wrk)) => {
-                let mut pkg: PACPropertiesIntermediate = from_value(pkg.to_owned())?;
-                let wrk: PACPropertiesIntermediate = from_value(wrk.to_owned())?;
+                let mut pkg: ManifestPropertiesIntermediate = from_value(pkg.to_owned())?;
+                let wrk: ManifestPropertiesIntermediate = from_value(wrk.to_owned())?;
 
                 pkg.complete_with(wrk);
                 pkg
             }
             (Some(pkg), None) => from_value(pkg.to_owned())?,
             (None, Some(wrk)) => from_value(wrk.to_owned())?,
-            _ => PACPropertiesIntermediate::default(),
+            _ => ManifestPropertiesIntermediate::default(),
         };
 
         // Complete/override with opts

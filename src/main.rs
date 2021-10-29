@@ -21,7 +21,7 @@ use thiserror::Error;
 mod build;
 mod diag;
 mod log;
-mod pacp;
+mod manifest;
 mod recovery;
 mod sinks;
 mod sources;
@@ -67,14 +67,14 @@ struct TraceOptions {
     resolve_only: bool,
 
     #[structopt(flatten)]
-    pac: PACOptions,
+    pac: ManifestOptions,
 
     #[structopt(flatten)]
     flash_options: FlashOptions,
 }
 
 #[derive(StructOpt, Debug)]
-pub struct PACOptions {
+pub struct ManifestOptions {
     /// Name of the PAC used in traced application.
     #[structopt(long = "pac-name", name = "pac-name")]
     pac_name: Option<String>,
@@ -132,7 +132,7 @@ struct RawFileOptions {
     #[structopt(long = "comment", short = "c", hidden = true)]
     comment: Option<String>,
     #[structopt(flatten)]
-    pac: PACOptions,
+    pac: ManifestOptions,
 }
 
 #[derive(StructOpt, Debug)]
@@ -151,7 +151,7 @@ pub enum RTICScopeError {
 
     // transparent errors
     #[error(transparent)]
-    PACError(#[from] pacp::PACMetadataError),
+    ManifestError(#[from] manifest::ManifestMetadataError),
     #[error(transparent)]
     MetadataError(#[from] recovery::RecoveryError),
     #[error(transparent)]
@@ -169,7 +169,7 @@ pub enum RTICScopeError {
 impl diag::DiagnosableError for RTICScopeError {
     fn diagnose(&self) -> Vec<String> {
         match self {
-            RTICScopeError::PACError(_) => vec![
+            RTICScopeError::ManifestError(_) => vec![
                 "[package.metadata.rtic-scope] takes precedence over [workspace.metadata.rtic-scope]".to_string(),
             ],
             _ => vec![],
@@ -187,7 +187,7 @@ impl RTICScopeError {
         type DE = dyn DiagnosableError;
         for hint in self.diagnose().iter().chain(
             match self {
-                Self::PACError(e) => Some(e as &DE),
+                Self::ManifestError(e) => Some(e as &DE),
                 Self::MetadataError(e) => Some(e as &DE),
                 Self::CargoError(e) => Some(e as &DE),
                 Self::SourceError(e) => Some(e as &DE),
@@ -520,15 +520,15 @@ type TraceTuple = (
 
 fn resolve_maps(
     cargo: &CargoWrapper,
-    pac: &PACOptions,
+    pac: &ManifestOptions,
     artifact: &Artifact,
 ) -> Result<recovery::TaskResolveMaps, RTICScopeError> {
     // Find crate name, features and path to interrupt enum from
     // manifest metadata, or override options.
-    let pacp = pacp::PACProperties::new(cargo, pac)?;
+    let manip = manifest::ManifestProperties::new(cargo, pac)?;
 
     // Map IRQ numbers and DWT matches to their respective RTIC tasks
-    let maps = recovery::TaskResolver::new(artifact, cargo, pacp)?.resolve()?;
+    let maps = recovery::TaskResolver::new(artifact, cargo, manip)?.resolve()?;
 
     Ok(maps)
 }
@@ -614,8 +614,12 @@ fn replay(
         } => {
             let src = sources::RawFileSource::new(fs::OpenOptions::new().read(true).open(file)?);
             let maps = resolve_maps(cargo, pac, artifact)?;
-            let metadata =
-                recovery::Metadata::new(maps, chrono::Local::now(), pac.tpiu_freq.unwrap(), comment.clone());
+            let metadata = recovery::Metadata::new(
+                maps,
+                chrono::Local::now(),
+                pac.tpiu_freq.unwrap(),
+                comment.clone(),
+            );
 
             Ok(Some((Box::new(src), vec![], metadata)))
         }
