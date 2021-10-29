@@ -476,10 +476,10 @@ impl<'a> TaskResolver<'a> {
                 .map_err(|e| RecoveryError::LibExtractFail(e))?;
             let dep = format!(
                 "\n{} = {{ version = \"{}\", features = [{}]}}\n",
-                self.pacp.name,
-                self.pacp.version,
+                self.pacp.pac_name,
+                self.pacp.pac_version,
                 self.pacp
-                    .features
+                    .pac_features
                     .iter()
                     .map(|f| format!("\"{}\"", f))
                     .collect::<Vec<String>>()

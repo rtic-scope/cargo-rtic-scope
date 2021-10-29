@@ -79,16 +79,16 @@ struct TraceOptions {
 #[derive(StructOpt, Debug)]
 pub struct PACOptions {
     /// Name of the PAC used in traced application.
-    #[structopt(long = "pac", name = "pac")]
-    name: Option<String>,
+    #[structopt(long = "pac-name", name = "pac-name")]
+    pac_name: Option<String>,
 
     /// Version of the PAC used in the traced application.
     #[structopt(long = "pac-version", name = "pac-version")]
-    version: Option<String>,
+    pac_version: Option<String>,
 
     /// Features of the PAC used in traced application.
     #[structopt(long = "pac-features", name = "pac-features")]
-    features: Option<Vec<String>>,
+    pac_features: Option<Vec<String>>,
 
     /// Path to PAC Interrupt enum.
     #[structopt(long = "pac-interrupt-path")]
@@ -178,7 +178,7 @@ impl diag::DiagnosableError for RTICScopeError {
     fn diagnose(&self) -> Vec<String> {
         match self {
             RTICScopeError::PACError(_) => vec![
-                "PAC properties can be set via --pac, --pac-features, --pac-interrupt-path".to_string(),
+                "PAC properties can be set via --pac-name, --pac-features, --pac-interrupt-path".to_string(),
                 "[package.metadata.rtic-scope] takes precedence over [workspace.metadata.rtic-scope]".to_string(),
             ],
             _ => vec![],
