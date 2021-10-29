@@ -14,6 +14,8 @@ struct PACPropertiesIntermediate {
     pub pac_features: Option<Vec<String>>,
     pub pac_version: Option<String>,
     pub interrupt_path: Option<String>,
+    pub tpiu_freq: Option<u32>,
+    pub tpiu_baud: Option<u32>,
 }
 
 impl Default for PACPropertiesIntermediate {
@@ -23,6 +25,8 @@ impl Default for PACPropertiesIntermediate {
             pac_features: None,
             pac_version: None,
             interrupt_path: None,
+            tpiu_freq: None,
+            tpiu_baud: None,
         }
     }
 }
@@ -41,6 +45,12 @@ impl PACPropertiesIntermediate {
         if self.pac_features.is_none() {
             self.pac_features = other.pac_features;
         }
+        if self.tpiu_freq.is_none() {
+            self.tpiu_freq = other.tpiu_freq;
+        }
+        if self.tpiu_baud.is_none() {
+            self.tpiu_baud = other.tpiu_baud;
+        }
     }
 }
 
@@ -50,6 +60,8 @@ pub struct PACProperties {
     pub pac_version: String,
     pub pac_features: Vec<String>,
     pub interrupt_path: String,
+    pub tpiu_freq: u32,
+    pub tpiu_baud: u32,
 }
 
 #[derive(Error, Debug)]
@@ -62,14 +74,20 @@ pub enum PACMetadataError {
     MissingVersion,
     #[error("Manifest metadata is missing PAC interrupt path")]
     MissingInterruptPath,
+    #[error("Manifest metadata is missing TPIU frequency")]
+    MissingFreq,
+    #[error("Manifest metadata is missing TPIU baud rate")]
+    MissingBaud,
 }
 
 impl diag::DiagnosableError for PACMetadataError {
     fn diagnose(&self) -> Vec<String> {
         match self {
-            Self::MissingName => vec!["Add `pac_name = \"<your PAC name>\"` to [package.metadata.rtic-scope] in Cargo.toml".into()],
-            Self::MissingVersion => vec!["Add `pac_version = \"your PAC version\"` to [package.metadata.rtic-scope] in Cargo.toml".into()],
-            Self::MissingInterruptPath => vec!["Add `interrupt_path = \"path to your PAC's Interrupt enum\"` to [package.metadata.rtic-scope] in Cargo.toml".into()],
+            Self::MissingName => vec!["Add `pac_name = \"<your PAC name>\"` to [package.metadata.rtic-scope] in Cargo.toml or specify --pac-name".into()],
+            Self::MissingVersion => vec!["Add `pac_version = \"your PAC version\"` to [package.metadata.rtic-scope] in Cargo.toml or specify --pac-version".into()],
+            Self::MissingInterruptPath => vec!["Add `interrupt_path = \"path to your PAC's Interrupt enum\"` to [package.metadata.rtic-scope] in Cargo.toml or specify --pac-interrupt-path".into()],
+            Self::MissingFreq => vec!["Add `tpiu_freq = \"your TPIU frequency\" to [package.metadata.rtic-scope] in Cargo.toml or specify --tpiu-freq`".into()],
+            Self::MissingBaud => vec!["Add `tpiu_baud = \"your TPIU baud rate\" to [package.metadata.rtic-scope] in Cargo.toml or specify --tpiu-baud`".into()],
             _ => vec![],
         }
     }
@@ -86,6 +104,8 @@ impl TryInto<PACProperties> for PACPropertiesIntermediate {
                 .interrupt_path
                 .ok_or(Self::Error::MissingInterruptPath)?,
             pac_features: self.pac_features.unwrap_or([].to_vec()),
+            tpiu_freq: self.tpiu_freq.ok_or(Self::Error::MissingFreq)?,
+            tpiu_baud: self.tpiu_baud.ok_or(Self::Error::MissingBaud)?,
         })
     }
 }
@@ -123,6 +143,12 @@ impl PACProperties {
         }
         if let Some(feats) = &opts.pac_features {
             int.pac_features = Some(feats.to_owned());
+        }
+        if let Some(freq) = &opts.tpiu_freq {
+            int.tpiu_freq = Some(freq.to_owned());
+        }
+        if let Some(baud) = &opts.tpiu_baud {
+            int.tpiu_baud = Some(baud.to_owned());
         }
 
         int.try_into()

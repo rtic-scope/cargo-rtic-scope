@@ -70,9 +70,6 @@ struct TraceOptions {
     pac: PACOptions,
 
     #[structopt(flatten)]
-    tpiu: TPIUOptions,
-
-    #[structopt(flatten)]
     flash_options: FlashOptions,
 }
 
@@ -93,18 +90,15 @@ pub struct PACOptions {
     /// Path to PAC Interrupt enum.
     #[structopt(long = "pac-interrupt-path")]
     interrupt_path: Option<String>,
-}
 
-#[derive(StructOpt, Debug)]
-pub struct TPIUOptions {
     /// Speed in Hz of the TPIU trace clock. Used to calculate
     /// timestamps of received timestamps.
     #[structopt(long = "tpiu-freq")]
-    clk_freq: u32,
+    tpiu_freq: Option<u32>,
 
-    // Baud rate of the communication from the target TPIU.
-    #[structopt(long = "tpiu-baud", default_value = "2000000")]
-    baud_rate: u32,
+    /// Baud rate of the communication from the target TPIU.
+    #[structopt(long = "tpiu-baud")]
+    tpiu_baud: Option<u32>,
 }
 
 /// Replay a previously recorded trace stream for post-mortem analysis.
@@ -135,8 +129,6 @@ struct RawFileOptions {
     #[structopt(name = "raw-file", long = "raw-file", requires("virtual-freq"))]
     file: Option<PathBuf>,
 
-    #[structopt(name = "virtual-freq", long = "tpiu-freq", hidden = true)]
-    freq: u32,
     #[structopt(long = "comment", short = "c", hidden = true)]
     comment: Option<String>,
     #[structopt(flatten)]
@@ -178,7 +170,6 @@ impl diag::DiagnosableError for RTICScopeError {
     fn diagnose(&self) -> Vec<String> {
         match self {
             RTICScopeError::PACError(_) => vec![
-                "PAC properties can be set via --pac-name, --pac-features, --pac-interrupt-path".to_string(),
                 "[package.metadata.rtic-scope] takes precedence over [workspace.metadata.rtic-scope]".to_string(),
             ],
             _ => vec![],
@@ -589,7 +580,7 @@ fn trace(
             session,
         ))
     } else {
-        Box::new(sources::ProbeSource::new(session, &opts.tpiu)?)
+        Box::new(sources::ProbeSource::new(session, &opts.pac)?)
     };
 
     // Sample the timestamp of target reset, wait for trace clock
@@ -599,7 +590,7 @@ fn trace(
             // Reset the target to execute flashed binary
             trace_source.reset_target()?; // XXX halt-and-reset opt not handled
 
-            Ok(opts.tpiu.clk_freq)
+            Ok(opts.pac.tpiu_freq.expect("no TPIU frequency"))
         })
         .context("Failed to initialize metadata")?;
 
@@ -616,7 +607,6 @@ fn replay(
             raw_options:
                 RawFileOptions {
                     file: Some(file),
-                    freq,
                     comment,
                     pac,
                 },
@@ -625,7 +615,7 @@ fn replay(
             let src = sources::RawFileSource::new(fs::OpenOptions::new().read(true).open(file)?);
             let maps = resolve_maps(cargo, pac, artifact)?;
             let metadata =
-                recovery::Metadata::new(maps, chrono::Local::now(), *freq, comment.clone());
+                recovery::Metadata::new(maps, chrono::Local::now(), pac.tpiu_freq.unwrap(), comment.clone());
 
             Ok(Some((Box::new(src), vec![], metadata)))
         }

@@ -1,5 +1,5 @@
 use crate::sources::{Source, SourceError};
-use crate::TPIUOptions;
+use crate::PACOptions;
 use crate::TraceData;
 
 use itm_decode::{Decoder, DecoderOptions};
@@ -11,13 +11,13 @@ pub struct ProbeSource {
 }
 
 impl ProbeSource {
-    pub fn new(mut session: Session, opts: &TPIUOptions) -> Result<Self, SourceError> {
+    pub fn new(mut session: Session, opts: &PACOptions) -> Result<Self, SourceError> {
         // Configure probe and target for tracing
         //
         // NOTE(unwrap) --tpiu-freq is a requirement to enter this
         // function.
-        let cfg = SwoConfig::new(opts.clk_freq)
-            .set_baud(opts.baud_rate)
+        let cfg = SwoConfig::new(opts.tpiu_freq.expect("no TPIU frequency"))
+            .set_baud(opts.tpiu_baud.expect("no TPIU baud rate"))
             .set_continuous_formatting(false);
         session
             .setup_swv(0, &cfg)
