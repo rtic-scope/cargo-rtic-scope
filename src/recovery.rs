@@ -56,7 +56,8 @@ impl diag::DiagnosableError for RecoveryError {
     fn diagnose(&self) -> Vec<String> {
         match self {
             RecoveryError::RTICArgumentsMissing => vec![
-                "RTIC Scope expects an RTIC application declaration on the form `#[app(...)] mod app { ... }` where the first `...` is the application arguments.".to_string()
+                "RTIC Scope expects an RTIC application declaration on the form `#[app(...)] mod app { ... }` where the first `...` is the application arguments.".to_string(),
+                "Change #[rtic::app(...)] to #[app(...)] via `use rtic::app;`.".to_string(),
             ],
             _ => vec![],
         }
