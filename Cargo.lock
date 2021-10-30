@@ -1214,6 +1214,7 @@ dependencies = [
 [[package]]
 name = "rtic-scope-api"
 version = "0.1.0-alpha.0"
+source = "git+https://github.com/rtic-scope/api.git#22ae2d5bec481e023aec603584f979a7426e092e"
 dependencies = [
  "anyhow",
  "chrono",
