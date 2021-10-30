@@ -205,7 +205,7 @@ impl fmt::Display for TaskResolveMaps {
             ($h:expr, $m:expr) => {{
                 writeln!(f, "{}:", $h)?;
                 for (k, v) in $m.iter() {
-                    writeln!(f, "\t {} -> {:?}", k, v)?;
+                    writeln!(f, "        {} -> {:?}", k, v)?;
                 }
 
                 Ok(())
