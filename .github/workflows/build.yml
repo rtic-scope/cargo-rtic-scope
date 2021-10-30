@@ -33,9 +33,22 @@ jobs:
           command: fmt
           args: -- --check
 
-  # Compilation check
-  check:
-    name: check
+  clippy:
+    name: clippy
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install libusb, libudev # for hidapi in probe-rs
+        run: |
+          sudo apt update
+          sudo apt install -y libusb-1.0-0-dev libudev-dev
+      - run: rustup component add clippy
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    name: build
     runs-on: ubuntu-20.04
     strategy:
       matrix:
@@ -79,37 +92,31 @@ jobs:
           target: ${{ matrix.target }}
           override: true
 
-      - name: cargo check
+      - name: cargo build
         uses: actions-rs/cargo@v1
         with:
-          use-cross: false
-          command: check
+          command: build
           args: --target=${{ matrix.target }}
-
-  clippy:
-    name: clippy
-    runs-on: ubuntu-20.04
-    steps:
-      - uses: actions/checkout@v1
-      - name: Install libusb, libudev # for hidapi in probe-rs
-        run: |
-          sudo apt update
-          sudo apt install -y libusb-1.0-0-dev libudev-dev
-      - run: rustup component add clippy
-      - uses: actions-rs/clippy-check@v1
+      - run: cp target/${{ matrix.target }}/debug/cargo-rtic-scope .
+      - name: upload artifact
+        uses: actions/upload-artifact@v2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          name: cargo-rtic-scope
+          path: ./cargo-rtic-scope
 
   resolve:
-    name: cargo rtic-scope trace --resolve-only
+    name: trace --resolve-only
     runs-on: ubuntu-20.04
     needs:
-      - check
+      - build
     steps:
-      - name: cargo install
-        uses: actions-rs/cargo@v1
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: download artifact
+        uses: actions/download-artifact@v2
         with:
-          command: install
-          args: --path .
-      - name: run test_output.sh
-        run: .ci/test_outputs.sh
+          name: cargo-rtic-scope
+      - run: chmod +x ./cargo-rtic-scope
+      - run: rustup target add thumbv7em-none-eabihf
+      - run: sudo apt update && sudo apt install -y binutils-arm-none-eabi
+      - run: .ci/test_outputs.sh ./cargo-rtic-scope

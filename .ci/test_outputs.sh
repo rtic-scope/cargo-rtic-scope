@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
 set -eux
-
 IFS=''
 
-expected_path=$(dirname "$0")/expected
-pushd $expected_path >/dev/null
+rtic_scope=$(realpath $1)
+pushd $(dirname "$0")/expected >/dev/null
 
-out=$(cargo rtic-scope trace --resolve-only --bin example 2>/dev/null)
-expected=$(cat ./example.run)
-
-if [ $expected != $out ]; then
-    exit 1
-fi
+# For each --bin, `trace --resolve-only` it, and compare with expected
+# output.
+for bin in src/bin/*.rs; do
+    bin=$(basename "$bin" .rs)
+    out=$($rtic_scope trace --resolve-only --bin $bin)
+    expected=$(cat ./out/$bin.run)
+    if [ $expected != $out ]; then
+        exit 1
+    fi
+done
 
 popd >/dev/null
 exit 0
