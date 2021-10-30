@@ -1,0 +1,101 @@
+# Adapted from <https://github.com/rtic-rs/cortex-m-rtic/blob/b71df58f2fb4ed85d4c8cf806d5837ce63c73f31/.github/workflows/build.yml>
+
+name: Build
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - ci
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Run cargo fmt -- --check
+  style:
+    name: style
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: rustfmt
+
+      - name: cargo fmt -- --check
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: -- --check
+
+  # Compilation check
+  check:
+    name: check
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+        toolchain:
+          - stable
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install libusb, libudev # for hidapi in probe-rs
+        run: |
+          sudo apt update
+          sudo apt install -y libusb-1.0-0-dev libudev-dev
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v2
+        with:
+          path: |
+            - ~/.cargo/bin/
+            - ~/.cargo/registry/index/
+            - ~/.cargo/registry/cache/
+            - ~/.cargo/git/db/
+          key: ${{ runner.OS }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.OS }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+            ${{ runner.OS }}-cargo-
+      - name: Cache build output dependencies
+        uses: actions/cache@v2
+        with:
+          path: target
+          key: ${{ runner.OS }}-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.OS }}-build-${{ hashFiles('**/Cargo.lock') }}
+            ${{ runner.OS }}-build-
+      - name: Install Rust ${{ matrix.toolchain }} with target (${{ matrix.target }})
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          target: ${{ matrix.target }}
+          override: true
+
+      - name: cargo check
+        uses: actions-rs/cargo@v1
+        with:
+          use-cross: false
+          command: check
+          args: --target=${{ matrix.target }}
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install libusb, libudev # for hidapi in probe-rs
+        run: |
+          sudo apt update
+          sudo apt install -y libusb-1.0-0-dev libudev-dev
+      - run: rustup component add clippy
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
