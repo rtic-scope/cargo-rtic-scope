@@ -1,7 +1,7 @@
 exceptions:
-        SysTick -> ["app", "blah2"]
+        SysTick -> ["app", "systick"]
 interrupts:
-        18 -> (["app", "blah"], "ADC")
+        18 -> (["app", "adc"], "ADC")
 software tasks:
         0 -> ["app", "foo"]
         1 -> ["app", "bar"]
