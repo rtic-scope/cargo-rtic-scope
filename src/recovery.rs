@@ -11,13 +11,13 @@ use cargo_metadata::Artifact;
 use chrono::Local;
 use include_dir::{dir::ExtractMode, include_dir};
 use itm_decode::{ExceptionAction, TimestampedTracePackets, TracePacket};
-use libloading;
+
 use proc_macro2::{Ident, TokenStream, TokenTree};
 use quote::{format_ident, quote};
 use rtic_scope_api::{self as api, EventChunk, EventType, TaskAction};
-use rtic_syntax;
+
 use serde::{Deserialize, Serialize};
-use syn;
+
 use thiserror::Error;
 
 type HwExceptionNumber = u16;
@@ -232,14 +232,14 @@ impl<'a> TaskResolver<'a> {
         pacp: ManifestProperties,
     ) -> Result<Self, RecoveryError> {
         // parse the RTIC app from the source file
-        let src = fs::read_to_string(&artifact.target.src_path)
-            .map_err(|e| RecoveryError::SourceRead(e))?;
+        let src =
+            fs::read_to_string(&artifact.target.src_path).map_err(RecoveryError::SourceRead)?;
         let mut rtic_app = syn::parse_str::<TokenStream>(&src)
-            .map_err(|e| RecoveryError::TokenizeFail(e))?
+            .map_err(RecoveryError::TokenizeFail)?
             .into_iter()
             .skip_while(|token| {
                 if let TokenTree::Group(g) = token {
-                    if let Some(c) = g.stream().into_iter().nth(0) {
+                    if let Some(c) = g.stream().into_iter().next() {
                         return c.to_string().as_str() != "app";
                     }
                 }
@@ -353,7 +353,7 @@ impl<'a> TaskResolver<'a> {
                     ctx.push(m.ident.clone());
                     if let Some((_, items)) = &m.content {
                         for item in items {
-                            traverse_item(&item, ctx, assocs, id_gen);
+                            traverse_item(item, ctx, assocs, id_gen);
                         }
                     }
                     ctx.pop();
@@ -375,7 +375,7 @@ impl<'a> TaskResolver<'a> {
             let mut settings = rtic_syntax::Settings::default();
             settings.parse_binds = true;
             rtic_syntax::parse2(self.app_args.clone(), self.app.clone(), settings)
-                .map_err(|e| RecoveryError::RTICParseFail(e))?
+                .map_err(RecoveryError::RTICParseFail)?
         };
 
         // Find the bound exceptions from the #[task(bound = ...)]
@@ -403,12 +403,7 @@ impl<'a> TaskResolver<'a> {
             .hardware_tasks
             .iter()
             .map(|(_name, hwt)| hwt.args.binds.clone())
-            .partition(|bind| {
-                known_exceptions
-                    .iter()
-                    .find(|&&int| int == bind.to_string())
-                    .is_some()
-            });
+            .partition(|bind| known_exceptions.iter().any(|&int| *bind == int));
         let binds = ext_binds.clone();
 
         // Resolve exception numbers from bound idents
@@ -423,7 +418,7 @@ impl<'a> TaskResolver<'a> {
             .iter()
             .filter_map(|(name, hwt)| {
                 let bind = &hwt.args.binds;
-                if let Some(_) = int_binds.iter().find(|&b| b == bind) {
+                if int_binds.iter().any(|b| b == bind) {
                     Some((bind.to_string(), ["app".to_string(), name.to_string()]))
                 } else {
                     None
@@ -436,14 +431,12 @@ impl<'a> TaskResolver<'a> {
             .iter()
             .filter_map(|(name, hwt)| {
                 let bind = &hwt.args.binds;
-                if let Some(int) = excpt_nrs.get(&bind) {
-                    Some((
-                        int.clone(),
+                excpt_nrs.get(bind).map(|int| {
+                    (
+                        *int,
                         (["app".to_string(), name.to_string()], bind.to_string()),
-                    ))
-                } else {
-                    None
-                }
+                    )
+                })
             })
             .collect();
 
@@ -461,19 +454,19 @@ impl<'a> TaskResolver<'a> {
         let target_dir = self.cargo.target_dir().join("cargo-rtic-trace-libadhoc");
         include_dir!("assets/libadhoc")
             .extract(&target_dir, ExtractMode::Overwrite)
-            .map_err(|e| RecoveryError::LibExtractFail(e))?;
+            .map_err(RecoveryError::LibExtractFail)?;
         // NOTE See <https://github.com/rust-lang/cargo/issues/9643>
         fs::rename(
             target_dir.join("not-Cargo.toml"),
             target_dir.join("Cargo.toml"),
         )
-        .map_err(|e| RecoveryError::LibExtractFail(e))?;
+        .map_err(RecoveryError::LibExtractFail)?;
         // Add required crate (and optional feature) as dependency
         {
             let mut manifest = fs::OpenOptions::new()
                 .append(true)
                 .open(target_dir.join("Cargo.toml"))
-                .map_err(|e| RecoveryError::LibExtractFail(e))?;
+                .map_err(RecoveryError::LibExtractFail)?;
             let dep = format!(
                 "\n{} = {{ version = \"{}\", features = [{}]}}\n",
                 self.pacp.pac_name,
@@ -487,7 +480,7 @@ impl<'a> TaskResolver<'a> {
             );
             manifest
                 .write_all(dep.as_bytes())
-                .map_err(|e| RecoveryError::LibExtractFail(e))?;
+                .map_err(RecoveryError::LibExtractFail)?;
         }
         // Prepare lib.rs
         {
@@ -495,12 +488,12 @@ impl<'a> TaskResolver<'a> {
             let mut src = fs::OpenOptions::new()
                 .append(true)
                 .open(target_dir.join("src/lib.rs"))
-                .map_err(|e| RecoveryError::LibExtractFail(e))?;
+                .map_err(RecoveryError::LibExtractFail)?;
             let import = str::parse::<TokenStream>(&self.pacp.interrupt_path)
                 .expect("Failed to tokenize pacp.interrupt_path");
             let import = quote!(use #import;);
             src.write_all(format!("\n{}\n", import).as_bytes())
-                .map_err(|e| RecoveryError::LibExtractFail(e))?;
+                .map_err(RecoveryError::LibExtractFail)?;
 
             // Generate the functions that must be exported
             for bind in binds {
@@ -513,7 +506,7 @@ impl<'a> TaskResolver<'a> {
                     }
                 );
                 src.write_all(format!("\n{}\n", fun).as_bytes())
-                    .map_err(|e| RecoveryError::LibExtractFail(e))?;
+                    .map_err(RecoveryError::LibExtractFail)?;
             }
         }
 
@@ -526,14 +519,14 @@ impl<'a> TaskResolver<'a> {
         )?;
         let lib = unsafe {
             libloading::Library::new(artifact.filenames.first().unwrap())
-                .map_err(|e| RecoveryError::LibLoadFail(e))?
+                .map_err(RecoveryError::LibLoadFail)?
         };
         let binds: Result<Vec<(proc_macro2::Ident, HwExceptionNumber)>, RecoveryError> = binds
-            .into_iter()
+            .iter()
             .map(|b| {
                 let func: libloading::Symbol<extern "C" fn() -> HwExceptionNumber> = unsafe {
                     lib.get(format!("{}{}", ADHOC_FUNC_PREFIX, b).as_bytes())
-                        .map_err(|e| RecoveryError::LibLookupFail(e))?
+                        .map_err(RecoveryError::LibLookupFail)?
                 };
                 Ok((b.clone(), func()))
             })

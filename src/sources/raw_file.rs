@@ -27,7 +27,7 @@ impl Iterator for RawFileSource {
     type Item = Result<TraceData, SourceError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(b) = self.bytes.next() {
+        for b in &mut self.bytes {
             match b {
                 Ok(b) => self.decoder.push(&[b]),
                 Err(e) => return Some(Err(SourceError::IterIOError(e))),

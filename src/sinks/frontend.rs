@@ -4,8 +4,6 @@ use crate::TraceData;
 use rtic_scope_api as api;
 use std::io::Write;
 
-use serde_json;
-
 pub struct FrontendSink {
     socket: std::os::unix::net::UnixStream,
 }
@@ -22,7 +20,7 @@ impl Sink for FrontendSink {
 
         self.socket
             .write_all(json.as_bytes())
-            .map_err(|e| SinkError::DrainIOError(e))
+            .map_err(SinkError::DrainIOError)
     }
 
     fn describe(&self) -> String {

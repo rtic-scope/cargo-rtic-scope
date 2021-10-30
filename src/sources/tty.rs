@@ -42,7 +42,7 @@ pub fn configure(device: &String) -> Result<fs::File, SourceError> {
     let file = fs::OpenOptions::new()
         .read(true)
         .open(&device)
-        .map_err(|e| SourceError::SetupIOError(e))?;
+        .map_err(SourceError::SetupIOError)?;
 
     unsafe {
         let fd = file.as_raw_fd();
@@ -213,7 +213,7 @@ impl Iterator for TTYSource {
     type Item = Result<TraceData, SourceError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(b) = self.bytes.next() {
+        for b in &mut self.bytes {
             match b {
                 Ok(b) => self.decoder.push(&[b]),
                 Err(e) => return Some(Err(SourceError::IterIOError(e))),
@@ -231,11 +231,8 @@ impl Iterator for TTYSource {
 
 impl Source for TTYSource {
     fn reset_target(&mut self) -> Result<(), SourceError> {
-        let mut core = self
-            .session
-            .core(0)
-            .map_err(|e| SourceError::ResetError(e))?;
-        core.reset().map_err(|e| SourceError::ResetError(e))?;
+        let mut core = self.session.core(0).map_err(SourceError::ResetError)?;
+        core.reset().map_err(SourceError::ResetError)?;
 
         Ok(())
     }
@@ -243,7 +240,7 @@ impl Source for TTYSource {
     fn avail_buffer(&self) -> BufferStatus {
         let avail_bytes = unsafe {
             let mut fionread: libc::c_int = 0;
-            if let Err(_) = ioctl::fionread(self.fd, &mut fionread) {
+            if ioctl::fionread(self.fd, &mut fionread).is_err() {
                 return BufferStatus::Unknown;
             } else {
                 fionread as i64

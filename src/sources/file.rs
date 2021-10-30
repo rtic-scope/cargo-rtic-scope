@@ -5,8 +5,6 @@ use crate::TraceData;
 use std::fs;
 use std::io::BufReader;
 
-use serde_json;
-
 /// Something data is deserialized from. Always a file.
 pub struct FileSource {
     reader: BufReader<fs::File>,

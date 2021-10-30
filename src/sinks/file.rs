@@ -12,7 +12,7 @@ use git2::{DescribeFormatOptions, DescribeOptions, Repository};
 use rtic_scope_api as api;
 use serde_json;
 
-const TRACE_FILE_EXT: &'static str = ".trace";
+const TRACE_FILE_EXT: &str = ".trace";
 
 pub struct FileSink {
     file: fs::File,
@@ -41,9 +41,9 @@ impl FileSink {
         // "blinky-gbaadf00-dirty-2021-06-16T17:13:16.trace"
         let repo = find_git_repo(artifact.target.src_path.clone().into())?;
         let git_shortdesc = repo
-            .describe(&DescribeOptions::new().show_commit_oid_as_fallback(true))?
+            .describe(DescribeOptions::new().show_commit_oid_as_fallback(true))?
             .format(Some(
-                &DescribeFormatOptions::new()
+                DescribeFormatOptions::new()
                     .abbreviated_size(7)
                     .dirty_suffix("-dirty"),
             ))?;
@@ -101,7 +101,7 @@ impl FileSink {
             let json = serde_json::to_string(&metadata)?;
             self.file.write_all(json.as_bytes())
         }
-        .map_err(|e| SinkError::DrainIOError(e))?;
+        .map_err(SinkError::DrainIOError)?;
 
         Ok(metadata)
     }
@@ -112,7 +112,7 @@ impl Sink for FileSink {
         let json = serde_json::to_string(&data)?;
         self.file
             .write_all(json.as_bytes())
-            .map_err(|e| SinkError::DrainIOError(e))
+            .map_err(SinkError::DrainIOError)
     }
 
     fn describe(&self) -> String {

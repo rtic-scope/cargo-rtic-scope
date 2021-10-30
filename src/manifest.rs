@@ -5,7 +5,7 @@ use crate::ManifestOptions;
 use std::convert::TryInto;
 
 use serde::Deserialize;
-use serde_json;
+
 use thiserror::Error;
 
 #[derive(Deserialize, Debug)]

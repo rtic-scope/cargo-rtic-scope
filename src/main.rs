@@ -194,8 +194,8 @@ impl RTICScopeError {
                 Self::SinkError(e) => Some(e as &DE),
                 _ => None,
             }
-            .and_then(|e| Some(e.diagnose()))
-            .unwrap_or(vec![])
+            .map(|e| e.diagnose())
+            .unwrap_or_default()
             .iter(),
         ) {
             log::hint(hint.to_owned());
@@ -328,7 +328,7 @@ fn main_try() -> Result<(), RTICScopeError> {
 
     // All preparatory I/O and information recovery done. Forward all
     // trace packets to all sinks.
-    let retstatus = run_loop(source, sinks, metadata.clone(), &opts, artifact.target.name);
+    let retstatus = run_loop(source, sinks, metadata, &opts, artifact.target.name);
 
     // Wait for frontends to proccess all packets and echo its' stderr
     for (i, (child, stderr)) in children.iter_mut().enumerate() {
@@ -418,25 +418,25 @@ fn run_loop(
         let chunk = metadata.build_event_chunk(data.clone());
 
         // Report any unmappable/unknown events that occured, and record stats
-        stats.packets = stats.packets + data.packets_consumed;
+        stats.packets += data.packets_consumed;
         for event in chunk.events.iter() {
             match event {
                 api::EventType::Unmappable(ref packet, ref reason) => {
-                    stats.nonmappable = stats.nonmappable + 1;
+                    stats.nonmappable += 1;
                     log::warn(format!(
                         "cannot map {:?} packet: {}",
                         packet, reason
                     ));
                 }
                 api::EventType::Unknown(ref packet) => {
-                    stats.nonmappable = stats.nonmappable + 1;
+                    stats.nonmappable += 1;
                     log::warn(format!(
                         "cannot map {:?} packet",
                         packet
                     ));
                 }
                 api::EventType::Invalid(ref malformed) => {
-                    stats.malformed = stats.malformed + 1;
+                    stats.malformed += 1;
                     log::err(format!("malformed packet: {}: {:?}", malformed, malformed));
                 },
                 api::EventType::Overflow => log::warn("Overflow detected! Packets may have been dropped and timestamps will be diverged until the next global timestamp".to_string()),
@@ -552,7 +552,7 @@ fn trace(
 
     // TODO make this into Sink::generate().remove_old(), etc.?
     let mut trace_sink = sinks::FileSink::generate_trace_file(
-        &artifact,
+        artifact,
         opts.trace_dir
             .as_ref()
             .unwrap_or(&cargo.target_dir().join("rtic-traces")),
@@ -575,8 +575,7 @@ fn trace(
 
     let mut trace_source: Box<dyn sources::Source> = if let Some(dev) = &opts.serial {
         Box::new(sources::TTYSource::new(
-            sources::tty::configure(&dev)
-                .with_context(|| format!("Failed to configure {}", dev))?,
+            sources::tty::configure(dev).with_context(|| format!("Failed to configure {}", dev))?,
             session,
         ))
     } else {
@@ -640,7 +639,7 @@ fn replay(
                 println!("{}\t{}\t{}", i, trace.display(), metadata.comment());
             }
 
-            return Ok(None);
+            Ok(None)
         }
         ReplayOptions {
             index: Some(idx),

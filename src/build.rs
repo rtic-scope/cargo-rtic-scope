@@ -6,7 +6,6 @@ use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use cargo_metadata;
 pub use cargo_metadata::Artifact;
 use cargo_metadata::Message;
 use thiserror::Error;
@@ -80,9 +79,9 @@ impl CargoWrapper {
         // Resolve artifact metadata
         let manifest_path = opts
             .iter()
-            .position(|ref opt| opt.as_str() == "--manifest-path")
+            .position(|opt| opt.as_str() == "--manifest-path")
             .and_then(|idx| opts.get(idx + 1))
-            .and_then(|arg| Some(PathBuf::from(arg)))
+            .map(PathBuf::from)
             .unwrap_or(find_manifest_path(&artifact)?);
         let metadata = cargo_metadata::MetadataCommand::new()
             .manifest_path(&manifest_path)
@@ -161,7 +160,7 @@ impl CargoWrapper {
 
         let mut child = cargo
             .spawn()
-            .map_err(|e| CargoError::CargoBuildSpawnWaitError(e))?;
+            .map_err(CargoError::CargoBuildSpawnWaitError)?;
         let stdout = BufReader::new(child.stdout.take().expect("Pipe to cargo process failed"));
         let stderr = BufReader::new(child.stderr.take().expect("Pipe to cargo process failed"));
 
@@ -169,7 +168,7 @@ impl CargoWrapper {
 
         let mut target_artifact: Option<Artifact> = None;
         for message in messages {
-            match message.map_err(|e| CargoError::StdoutError(e))? {
+            match message.map_err(CargoError::StdoutError)? {
                 Message::CompilerArtifact(artifact)
                     if artifact.target.kind == [expected_artifact_kind] =>
                 {
@@ -190,9 +189,7 @@ impl CargoWrapper {
             }
         }
 
-        let status = child
-            .wait()
-            .map_err(|e| CargoError::CargoBuildSpawnWaitError(e))?;
+        let status = child.wait().map_err(CargoError::CargoBuildSpawnWaitError)?;
 
         if !status.success() {
             return Err(CargoError::CargoBuildExecFailed(status, opts));
@@ -218,10 +215,11 @@ fn find_manifest_path(artifact: &cargo_metadata::Artifact) -> Result<PathBuf, Ca
     let mut path = start_path();
 
     loop {
-        if {
+        let res = {
             path.push("Cargo.toml");
             path.exists()
-        } {
+        };
+        if res {
             return Ok(path.into());
         } else {
             path.pop(); // remove Cargo.toml

@@ -21,7 +21,7 @@ impl ProbeSource {
             .set_continuous_formatting(false);
         session
             .setup_swv(0, &cfg)
-            .map_err(|e| SourceError::SetupProbeError(e))?;
+            .map_err(SourceError::SetupProbeError)?;
 
         // Enable exception tracing
         // {
@@ -62,11 +62,8 @@ impl Iterator for ProbeSource {
 
 impl Source for ProbeSource {
     fn reset_target(&mut self) -> Result<(), SourceError> {
-        let mut core = self
-            .session
-            .core(0)
-            .map_err(|e| SourceError::ResetError(e))?;
-        core.reset().map_err(|e| SourceError::ResetError(e))?;
+        let mut core = self.session.core(0).map_err(SourceError::ResetError)?;
+        core.reset().map_err(SourceError::ResetError)?;
 
         Ok(())
     }
