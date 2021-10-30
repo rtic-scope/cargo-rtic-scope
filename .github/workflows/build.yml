@@ -99,3 +99,17 @@ jobs:
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  resolve:
+    name: cargo rtic-scope trace --resolve-only
+    runs-on: ubuntu-20.04
+    needs:
+      - check
+    steps:
+      - name: cargo install
+        uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: --path .
+      - name: run test_output.sh
+        run: .ci/test_outputs.sh

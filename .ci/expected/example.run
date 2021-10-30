@@ -1,0 +1,8 @@
+exceptions:
+        SysTick -> ["app", "blah2"]
+interrupts:
+        18 -> (["app", "blah"], "ADC")
+software tasks:
+        0 -> ["app", "foo"]
+        1 -> ["app", "bar"]
+        2 -> ["app", "baz"]
