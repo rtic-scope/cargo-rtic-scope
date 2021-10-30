@@ -222,7 +222,7 @@ fn main_try() -> Result<(), RTICScopeError> {
         .get_matches_from(&args);
     let opts = Opts::from_clap(&matches);
 
-    // Should be quit early?
+    // Should we quit early?
     if let Command::Trace(opts) = &opts.cmd {
         let fo = &opts.flash_options;
         fo.probe_options.maybe_load_chip_desc()?;
