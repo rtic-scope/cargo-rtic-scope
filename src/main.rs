@@ -246,9 +246,21 @@ fn main_try() -> Result<(), RTICScopeError> {
     )?;
 
     let prog = format!("{} ({})", artifact.target.name, artifact.target.src_path,);
+    let preparing_target = match opts.cmd {
+        Command::Trace(ref opts) => !opts.resolve_only,
+        Command::Replay(_) => false,
+    };
     log::status(
         "Recovering",
-        format!("metadata for {} and preparing target...", prog,),
+        format!(
+            "metadata for {}{}",
+            prog,
+            if preparing_target {
+                " and preparing target..."
+            } else {
+                "..."
+            }
+        ),
     );
 
     // Configure source and sinks. Recover the information we need to
