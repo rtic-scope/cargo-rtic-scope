@@ -97,12 +97,11 @@ jobs:
         with:
           command: build
           args: --target=${{ matrix.target }}
-      - run: cp target/${{ matrix.target }}/debug/cargo-rtic-scope .
       - name: upload artifact
         uses: actions/upload-artifact@v2
         with:
           name: cargo-rtic-scope
-          path: ./cargo-rtic-scope
+          path: target/${{ matrix.target }}/debug/cargo-rtic-scope
 
   resolve:
     name: trace --resolve-only
@@ -116,7 +115,8 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: cargo-rtic-scope
-      - run: chmod +x ./cargo-rtic-scope
+          path: ./artifacts
+      - run: chmod +x artifacts/cargo-rtic-scope
       - run: rustup target add thumbv7em-none-eabihf
       - run: sudo apt update && sudo apt install -y binutils-arm-none-eabi
-      - run: .ci/test_outputs.sh ./cargo-rtic-scope
+      - run: .ci/test_outputs.sh artifacts/cargo-rtic-scope

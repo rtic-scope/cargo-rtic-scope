@@ -1,0 +1,17 @@
+[package]
+name = "cortex-m-rtic-trace"
+version = "0.1.0-alpha.0"
+authors = ["Viktor Sonesten <v@tmplt.dev>"]
+edition = "2018"
+readme = "README.md"
+repository = "https://github.com/rtic-scope/cortex-m-rtic-trace"
+homepage = "https://github.com/rtic-scope/cortex-m-rtic-trace"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+cortex-m = "0.7"
+rtic-trace-macros = { path = "macros", version = "0.1.0-alpha.0" }
+
+[dependencies.stm32f4]
+version = "0.13"
+features = ["stm32f401"]
