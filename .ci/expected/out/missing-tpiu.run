@@ -1,0 +1,3 @@
+Error Manifest metadata is missing TPIU frequency
+Hint [package.metadata.rtic-scope] takes precedence over [workspace.metadata.rtic-scope]
+Hint Add `tpiu_freq = "your TPIU frequency" to [package.metadata.rtic-scope] in Cargo.toml or specify --tpiu-freq`

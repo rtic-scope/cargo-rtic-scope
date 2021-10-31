@@ -1,0 +1,40 @@
+[package]
+name = "rtic-parse-test"
+version = "0.0.0"
+authors = ["Viktor Sonesten <v@tmplt.dev>"]
+edition = "2018"
+
+[package.metadata.rtic-scope]
+pac_name = "stm32f4"
+pac_features = ["stm32f401"]
+pac_version = "0.13"
+interrupt_path = "stm32f4::stm32f401::Interrupt"
+
+[workspace]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+embedded-hal = "0.2"
+nb = "1"
+cortex-m = "0.7"
+cortex-m-rt = "0.6"
+panic-halt = "0.2"
+cortex-m-rtic = "=0.6.0-rc.2"
+cortex-m-rtic-trace = { git = "https://github.com/rtic-scope/cortex-m-rtic-trace" }
+cortex-m-semihosting = "0.3.3"
+
+[dependencies.panic-semihosting]
+features = ["exit"]
+version = "0.5.2"
+
+[dependencies.stm32f4]
+version = "0.13"
+features = ["stm32f401", "rt"]
+
+[dependencies.stm32f4xx-hal]
+version = "0.9"
+features = ["rt", "stm32f401"]
+
+[patch.crates-io]
+cortex-m = { git = "https://github.com/rtic-scope/cortex-m", branch = "feat/tracing" }
