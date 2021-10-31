@@ -1,0 +1,20 @@
+[package]
+name = "rtic-trace-macros"
+version = "0.1.0-alpha.0"
+authors = ["Viktor Sonesten <v@tmplt.dev>"]
+edition = "2018"
+repository = "https://github.com/rtic-scope/cortex-m-rtic-trace"
+homepage = "https://github.com/rtic-scope/cortex-m-rtic-trace"
+license = "MIT OR Apache-2.0"
+readme = "../README.md"
+description = "Procedural macros or the cortex-m-rtic-trace crate"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = "1"
+
+[dependencies.syn]
+version = "1"
+features = [ "parsing", "full" ]

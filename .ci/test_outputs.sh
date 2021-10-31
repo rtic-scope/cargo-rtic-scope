@@ -10,6 +10,7 @@ pushd $(dirname "$0")/expected >/dev/null
 cp ./manifests/general.toml Cargo.toml
 for bin in src/bin/*.rs; do
     bin=$(basename "$bin" .rs)
+    cargo build --bin $bin # RTIC Scope does not forward compilation errors as expected
     out=$($rtic_scope trace --resolve-only --bin $bin 2>&1 || true)
 
     # for each (fixed) expected string, ensure it's in the output.
