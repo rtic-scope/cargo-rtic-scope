@@ -51,6 +51,8 @@ impl diag::DiagnosableError for CargoError {
                 "Modify your call so that only one {}-crate is built. Try --bin or --example.",
                 kind
             )],
+            CargoError::CargoBuildExecFailed(_, _) => vec!["Cargo errors/warnings are not properly propagated at the moment (see <https://github.com/rtic-scope/cargo-rtic-scope/issues/50>).".to_string(),
+            "Manually build your target application with `cargo build` to see eventual errors/warnings.".to_string()],
             _ => vec![],
         }
     }

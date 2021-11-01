@@ -1,0 +1,3 @@
+Error `cargo build --bin general` failed with exit status: 101
+Hint Cargo errors/warnings are not properly propagated at the moment (see <https://github.com/rtic-scope/cargo-rtic-scope/issues/50>).
+Hint Manually build your target application with `cargo build` to see eventual errors/warnings.
