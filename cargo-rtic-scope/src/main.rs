@@ -585,13 +585,16 @@ fn trace(
         flashloader,
     )?;
 
+    // Read the RTIC Scope manifest metadata block
+    let manip = manifest::ManifestProperties::new(cargo, &opts.pac)?;
+
     let mut trace_source: Box<dyn sources::Source> = if let Some(dev) = &opts.serial {
         Box::new(sources::TTYSource::new(
             sources::tty::configure(dev).with_context(|| format!("Failed to configure {}", dev))?,
             session,
         ))
     } else {
-        Box::new(sources::ProbeSource::new(session, &opts.pac)?)
+        Box::new(sources::ProbeSource::new(session, &manip)?)
     };
 
     // Sample the timestamp of target reset, wait for trace clock
@@ -601,7 +604,7 @@ fn trace(
             // Reset the target to execute flashed binary
             trace_source.reset_target()?; // XXX halt-and-reset opt not handled
 
-            Ok(opts.pac.tpiu_freq.expect("no TPIU frequency"))
+            Ok(manip.tpiu_freq)
         })
         .context("Failed to initialize metadata")?;
 
