@@ -27,7 +27,13 @@ jobs:
           override: true
           components: rustfmt
 
-      - name: cargo fmt -- --check
+      - name: check workspace formatting
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: -- --check
+      - run: cd ./examples
+      - name: check examples formatting
         uses: actions-rs/cargo@v1
         with:
           command: fmt
@@ -92,7 +98,7 @@ jobs:
           target: ${{ matrix.target }}
           override: true
 
-      - name: cargo build
+      - name: build workspace
         uses: actions-rs/cargo@v1
         with:
           command: build
