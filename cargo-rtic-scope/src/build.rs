@@ -23,7 +23,7 @@ pub enum CargoError {
     MultipleSuitableArtifacts(String, Option<Vec<String>>),
     #[error("No suitable {0} artifacts were found after `cargo build {}`", Self::maybe_opts_to_str(.1))]
     NoSuitableArtifact(String, Option<Vec<String>>),
-    #[error("`cargo build {}` failed with exit status {0}", Self::maybe_opts_to_str(.1))]
+    #[error("`cargo build {}` failed with {0}", Self::maybe_opts_to_str(.1))]
     CargoBuildExecFailed(std::process::ExitStatus, Option<Vec<String>>),
     #[error("Failed to execute `cargo metadata`: {0}")]
     CargoMetadataExecFailed(#[from] cargo_metadata::Error),
