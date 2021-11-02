@@ -29,6 +29,7 @@ ctrlc = "3"
 thiserror = "1"
 colored = "2"
 crossterm = "0.20"
+rand = "0.8"
 
 [dependencies.probe-rs]
 version = "0.11"

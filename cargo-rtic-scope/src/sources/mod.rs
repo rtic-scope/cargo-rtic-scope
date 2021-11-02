@@ -61,3 +61,6 @@ pub use probe::ProbeSource;
 
 mod raw_file;
 pub use raw_file::RawFileSource;
+
+mod bogus;
+pub use bogus::BogusSource;

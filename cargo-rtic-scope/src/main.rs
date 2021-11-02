@@ -66,6 +66,10 @@ struct TraceOptions {
     #[structopt(long = "resolve-only")]
     resolve_only: bool,
 
+    /// Generate a bogus trace for debugging purposes.
+    #[structopt(long = "bogus-trace")]
+    bogus_trace: bool,
+
     #[structopt(flatten)]
     pac: ManifestOptions,
 
