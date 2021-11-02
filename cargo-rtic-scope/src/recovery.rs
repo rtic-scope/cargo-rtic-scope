@@ -153,7 +153,7 @@ impl Metadata {
             self.maps
                 .sw_assocs
                 .get(&(value[0] as usize))
-                .and_then(|v| Some(v.join("::")))
+                .map(|v| v.join("::"))
                 .ok_or(RecoveryError::MissingSWMap(value))
         };
 

@@ -32,7 +32,7 @@ pub fn trace(_attrs: TokenStream, item: TokenStream) -> TokenStream {
             ::cortex_m_rtic_trace::__write_exit_id(#task_id);
         ))
         .unwrap();
-        let mut stmts = vec![prologue.clone()];
+        let mut stmts = vec![prologue];
         stmts.append(&mut fun.block.stmts);
         stmts.push(epilogue);
         stmts
