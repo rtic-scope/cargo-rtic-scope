@@ -2,6 +2,8 @@ use crate::manifest::ManifestProperties;
 use crate::sources::{Source, SourceError};
 use crate::TraceData;
 
+use std::time::Duration;
+
 use itm_decode::{Decoder, DecoderOptions};
 use probe_rs::{architecture::arm::SwoConfig, Session};
 
@@ -61,9 +63,14 @@ impl Iterator for ProbeSource {
 }
 
 impl Source for ProbeSource {
-    fn reset_target(&mut self) -> Result<(), SourceError> {
+    fn reset_target(&mut self, reset_halt: bool) -> Result<(), SourceError> {
         let mut core = self.session.core(0).map_err(SourceError::ResetError)?;
-        core.reset().map_err(SourceError::ResetError)?;
+        if reset_halt {
+            core.reset_and_halt(Duration::from_millis(250))
+                .map_err(SourceError::ResetError)?;
+        } else {
+            core.reset().map_err(SourceError::ResetError)?;
+        }
 
         Ok(())
     }

@@ -602,7 +602,7 @@ fn trace(
     let metadata = trace_sink
         .init(maps, manip.clone(), opts.comment.clone(), || {
             // Reset the target to execute flashed binary
-            trace_source.reset_target()?; // XXX halt-and-reset opt not handled
+            trace_source.reset_target(opts.flash_options.reset_halt)?;
 
             Ok(manip.tpiu_freq)
         })
