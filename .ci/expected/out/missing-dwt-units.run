@@ -1,0 +1,3 @@
+Error Manifest metadata is missing the DWT unit ID for entering/exiting software tasks
+Hint [package.metadata.rtic-scope] takes precedence over [workspace.metadata.rtic-scope]
+Hint Add `dwt_enter_id = "your enter DWT unit ID"` and `dwt_exit_id = "your exit DWT unit ID"` to [package.metadata.rtic-scope] in Cargo.toml

@@ -47,14 +47,19 @@
 /// function. Refer to crate example usage.
 pub use rtic_trace_macros::trace;
 
-// TODO is there an even better way to store this?
-static mut WATCH_VARIABLE: u32 = 0;
+struct WatchVars {
+    /// Watch variable to which the just entered software task ID is written to.
+    enter: u32,
+
+    /// Watch variable to which the just exited software task ID is written to.
+    exit: u32,
+}
+static mut WATCH_VARIABLES: WatchVars = WatchVars { enter: 0, exit: 0 };
 
 /// Auxilliary functions for peripheral configuration. Should be called
 /// in the init-function, and preferably in order of (1)
-/// [setup::core_peripherals]; (2) [setup::device_peripherals]; (3)
-/// [setup::assign_dwt_unit]; and last, (4)
-/// [setup::send_trace_clk_freq]. Refer to crate example usage.
+/// [setup::core_peripherals]; (2) [setup::device_peripherals]; and last, (3)
+/// [setup::assign_dwt_unit]. Refer to crate example usage.
 pub mod setup {
     use cortex_m::peripheral as Core;
     use cortex_m::peripheral::{
@@ -110,28 +115,25 @@ pub mod setup {
     /// tracing. The unit is indirectly utilized by [super::trace]. Any
     /// changes to the unit after this function yields undefined
     /// behavior, in regards to RTIC task tracing.
-    pub fn assign_dwt_unit(dwt: &Core::dwt::Comparator) {
-        let watch_address: u32 = unsafe { &super::WATCH_VARIABLE as *const _ } as u32;
-        // TODO do we need to clear the MATCHED, bit[24] after every match?
-        dwt.configure(ComparatorFunction::Address(ComparatorAddressSettings {
-            address: watch_address,
-            mask: 0,
-            emit: EmitOption::Data,
-            access_type: AccessType::WriteOnly,
-        }))
-        .unwrap(); // NOTE safe: valid (emit, access_type) used
-    }
+    pub fn assign_dwt_units(enter_dwt: &Core::dwt::Comparator, exit_dwt: &Core::dwt::Comparator) {
+        let enter_addr: u32 = unsafe { &super::WATCH_VARIABLES.enter as *const _ } as u32;
+        let exit_addr: u32 = unsafe { &super::WATCH_VARIABLES.exit as *const _ } as u32;
 
-    /// Sends the given frequency over ITM to the RTIC Scope backend to
-    /// be registered as the trace clock frequency. Used to convert
-    /// timestamp register values to absolute timestamps. Should only be
-    /// called once, and after [assign_dwt_unit].
-    pub fn send_trace_clk_freq(freq: u32) {
-        // Write all 4 bytes, which denote that the payload is a trace
-        // clock frequency.
-        super::__write_trace_payload(freq);
+        for (dwt, addr) in [(enter_dwt, enter_addr), (exit_dwt, exit_addr)] {
+            // TODO do we need to clear the MATCHED, bit[24] after every match?
+            dwt.configure(ComparatorFunction::Address(ComparatorAddressSettings {
+                address: addr,
+                mask: 0,
+                emit: EmitOption::Data,
+                access_type: AccessType::WriteOnly,
+            }))
+            .unwrap(); // NOTE safe: valid (emit, access_type) used
+        }
     }
 }
+
+// TODO only write as much as needed. e.g. for id < 256, only 8 bits
+// must be written.
 
 /// The function utilized by [trace] to write the unique software task
 /// ID to the watch address. You are discouraged to use this function
@@ -139,10 +141,15 @@ pub mod setup {
 /// `parsing` module. If used directly, task IDs must also be properly
 /// configured for the host application.
 #[inline]
-pub fn __write_trace_payload(id: u32) {
-    // TODO only write as much as needed. e.g. for id < 256, only 8 bits
-    // must be written.
+pub fn __write_enter_id(id: u32) {
     unsafe {
-        WATCH_VARIABLE = id;
+        WATCH_VARIABLES.enter = id;
+    }
+}
+
+#[inline]
+pub fn __write_exit_id(id: u32) {
+    unsafe {
+        WATCH_VARIABLES.exit = id;
     }
 }

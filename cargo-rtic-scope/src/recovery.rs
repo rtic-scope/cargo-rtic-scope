@@ -10,7 +10,7 @@ use std::io::Write;
 use cargo_metadata::Artifact;
 use chrono::Local;
 use include_dir::{dir::ExtractMode, include_dir};
-use itm_decode::{ExceptionAction, TimestampedTracePackets, TracePacket};
+use itm_decode::{ExceptionAction, MemoryAccessType, TimestampedTracePackets, TracePacket};
 
 use proc_macro2::{Ident, TokenStream, TokenTree};
 use quote::{format_ident, quote};
@@ -34,6 +34,8 @@ pub enum RecoveryError {
     MissingHWLabelExceptionMap(itm_decode::cortex_m::Exception),
     #[error("The IRQ ({0}) -> RTIC task mapping does not exist")]
     MissingHWExceptionMap(HwExceptionNumber),
+    #[error("The DataTraceValue ({0:?}) -> RTIC task mapping does not exist")]
+    MissingSWMap(Vec<u8>),
     #[error("Failed to read artifact source file: {0}")]
     SourceRead(#[source] std::io::Error),
     #[error("Failed to tokenize artifact source file: {0}")]
@@ -67,6 +69,7 @@ impl diag::DiagnosableError for RecoveryError {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Metadata {
     maps: TaskResolveMaps,
+    manip: ManifestProperties,
     timestamp: chrono::DateTime<Local>,
     freq: u32,
     comment: Option<String>,
@@ -75,12 +78,14 @@ pub struct Metadata {
 impl Metadata {
     pub fn new(
         maps: TaskResolveMaps,
+        manip: ManifestProperties,
         timestamp: chrono::DateTime<Local>,
         freq: u32,
         comment: Option<String>,
     ) -> Self {
         Self {
             maps,
+            manip,
             timestamp,
             freq,
             comment,
@@ -119,7 +124,7 @@ impl Metadata {
             }
         };
 
-        let resolve_exception = |&excpt| -> Result<String, RecoveryError> {
+        let resolve_hw_task = |&excpt| -> Result<String, RecoveryError> {
             use itm_decode::cortex_m::VectActive;
 
             match excpt {
@@ -141,6 +146,17 @@ impl Metadata {
             }
         };
 
+        let resolve_sw_task = |value: Vec<u8>| -> Result<String, RecoveryError> {
+            if value.iter().filter(|&b| *b > 0).count() > 1 || value.is_empty() {
+                return Err(RecoveryError::MissingSWMap(value));
+            }
+            self.maps
+                .sw_assocs
+                .get(&(value[0] as usize))
+                .map(|v| v.join("::"))
+                .ok_or(RecoveryError::MissingSWMap(value))
+        };
+
         // convert itm_decode::TracePacket -> api::EventType
         let mut events = vec![];
         for packet in packets.packets.iter() {
@@ -150,7 +166,7 @@ impl Metadata {
                     events.push(EventType::Overflow);
                 }
                 TracePacket::ExceptionTrace { exception, action } => events.push(EventType::Task {
-                    name: match resolve_exception(exception) {
+                    name: match resolve_hw_task(exception) {
                         Ok(name) => name,
                         Err(e) => {
                             events.push(EventType::Unmappable(packet.clone(), e.to_string()));
@@ -163,8 +179,28 @@ impl Metadata {
                         ExceptionAction::Returned => TaskAction::Returned,
                     },
                 }),
-                // XXX Don't know how to convert
-                packet => events.push(EventType::Unknown(packet.clone())),
+                TracePacket::DataTraceValue {
+                    comparator,
+                    access_type,
+                    value,
+                } if *access_type == MemoryAccessType::Write => events.push(EventType::Task {
+                    action: match *comparator as usize {
+                        c if c == self.manip.dwt_enter_id => TaskAction::Entered,
+                        c if c == self.manip.dwt_exit_id => TaskAction::Exited,
+                        _ => {
+                            events.push(EventType::Unknown(packet.clone()));
+                            continue;
+                        }
+                    },
+                    name: match resolve_sw_task(value.clone()) {
+                        Ok(name) => name,
+                        Err(e) => {
+                            events.push(EventType::Unmappable(packet.clone(), e.to_string()));
+                            continue;
+                        }
+                    },
+                }),
+                _ => events.push(EventType::Unknown(packet.clone())),
             }
         }
 
