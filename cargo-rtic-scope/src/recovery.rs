@@ -67,6 +67,7 @@ impl diag::DiagnosableError for RecoveryError {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Metadata {
     maps: TaskResolveMaps,
+    manip: ManifestProperties,
     timestamp: chrono::DateTime<Local>,
     freq: u32,
     comment: Option<String>,
@@ -75,12 +76,14 @@ pub struct Metadata {
 impl Metadata {
     pub fn new(
         maps: TaskResolveMaps,
+        manip: ManifestProperties,
         timestamp: chrono::DateTime<Local>,
         freq: u32,
         comment: Option<String>,
     ) -> Self {
         Self {
             maps,
+            manip,
             timestamp,
             freq,
             comment,

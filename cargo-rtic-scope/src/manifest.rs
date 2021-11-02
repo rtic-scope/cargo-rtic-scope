@@ -4,7 +4,7 @@ use crate::ManifestOptions;
 
 use std::convert::TryInto;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use thiserror::Error;
 
@@ -16,6 +16,8 @@ struct ManifestPropertiesIntermediate {
     pub interrupt_path: Option<String>,
     pub tpiu_freq: Option<u32>,
     pub tpiu_baud: Option<u32>,
+    pub dwt_enter_id: Option<usize>,
+    pub dwt_exit_id: Option<usize>,
 }
 
 impl Default for ManifestPropertiesIntermediate {
@@ -27,6 +29,8 @@ impl Default for ManifestPropertiesIntermediate {
             interrupt_path: None,
             tpiu_freq: None,
             tpiu_baud: None,
+            dwt_enter_id: None,
+            dwt_exit_id: None,
         }
     }
 }
@@ -51,10 +55,16 @@ impl ManifestPropertiesIntermediate {
         if self.tpiu_baud.is_none() {
             self.tpiu_baud = other.tpiu_baud;
         }
+        if self.dwt_enter_id.is_none() {
+            self.dwt_enter_id = other.dwt_enter_id;
+        }
+        if self.dwt_exit_id.is_none() {
+            self.dwt_exit_id = other.dwt_exit_id;
+        }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ManifestProperties {
     pub pac_name: String,
     pub pac_version: String,
@@ -62,6 +72,8 @@ pub struct ManifestProperties {
     pub interrupt_path: String,
     pub tpiu_freq: u32,
     pub tpiu_baud: u32,
+    pub dwt_enter_id: usize,
+    pub dwt_exit_id: usize,
 }
 
 #[derive(Error, Debug)]
@@ -78,6 +90,8 @@ pub enum ManifestMetadataError {
     MissingFreq,
     #[error("Manifest metadata is missing TPIU baud rate")]
     MissingBaud,
+    #[error("Manifest metadata is missing the DWT unit ID for entering/exiting software tasks")]
+    MissingDWTUnit,
 }
 
 impl diag::DiagnosableError for ManifestMetadataError {
@@ -88,6 +102,7 @@ impl diag::DiagnosableError for ManifestMetadataError {
             Self::MissingInterruptPath => vec!["Add `interrupt_path = \"path to your PAC's Interrupt enum\"` to [package.metadata.rtic-scope] in Cargo.toml or specify --pac-interrupt-path".into()],
             Self::MissingFreq => vec!["Add `tpiu_freq = \"your TPIU frequency\" to [package.metadata.rtic-scope] in Cargo.toml or specify --tpiu-freq`".into()],
             Self::MissingBaud => vec!["Add `tpiu_baud = \"your TPIU baud rate\" to [package.metadata.rtic-scope] in Cargo.toml or specify --tpiu-baud`".into()],
+            Self::MissingDWTUnit => vec!["Add `dwt_enter_id = \"your enter DWT unit ID\"` and `dwt_exit_id = \"your exit DWT unit ID\"` to [package.metadata.rtic-scope] in Cargo.toml".into()],
             _ => vec![],
         }
     }
@@ -106,6 +121,8 @@ impl TryInto<ManifestProperties> for ManifestPropertiesIntermediate {
             pac_features: self.pac_features.unwrap_or([].to_vec()),
             tpiu_freq: self.tpiu_freq.ok_or(Self::Error::MissingFreq)?,
             tpiu_baud: self.tpiu_baud.ok_or(Self::Error::MissingBaud)?,
+            dwt_enter_id: self.dwt_enter_id.ok_or(Self::Error::MissingDWTUnit)?,
+            dwt_exit_id: self.dwt_exit_id.ok_or(Self::Error::MissingDWTUnit)?,
         })
     }
 }
@@ -113,7 +130,7 @@ impl TryInto<ManifestProperties> for ManifestPropertiesIntermediate {
 impl ManifestProperties {
     pub fn new(
         cargo: &CargoWrapper,
-        opts: &ManifestOptions,
+        opts: Option<&ManifestOptions>,
     ) -> Result<Self, ManifestMetadataError> {
         let package_meta = cargo.package().unwrap().metadata.get("rtic-scope");
         let workspace_meta = cargo.metadata().workspace_metadata.get("rtic-scope");
@@ -134,24 +151,29 @@ impl ManifestProperties {
             _ => ManifestPropertiesIntermediate::default(),
         };
 
-        // Complete/override with opts
-        if let Some(pac) = &opts.pac_name {
-            int.pac_name = Some(pac.to_owned());
-        }
-        if let Some(pac_version) = &opts.pac_version {
-            int.pac_version = Some(pac_version.to_owned());
-        }
-        if let Some(intp) = &opts.interrupt_path {
-            int.interrupt_path = Some(intp.to_owned());
-        }
-        if let Some(feats) = &opts.pac_features {
-            int.pac_features = Some(feats.to_owned());
-        }
-        if let Some(freq) = &opts.tpiu_freq {
-            int.tpiu_freq = Some(freq.to_owned());
-        }
-        if let Some(baud) = &opts.tpiu_baud {
-            int.tpiu_baud = Some(baud.to_owned());
+        let override_with_opts = |int: &mut ManifestPropertiesIntermediate,
+                                  opts: &ManifestOptions| {
+            if let Some(pac) = &opts.pac_name {
+                int.pac_name = Some(pac.to_owned());
+            }
+            if let Some(pac_version) = &opts.pac_version {
+                int.pac_version = Some(pac_version.to_owned());
+            }
+            if let Some(intp) = &opts.interrupt_path {
+                int.interrupt_path = Some(intp.to_owned());
+            }
+            if let Some(feats) = &opts.pac_features {
+                int.pac_features = Some(feats.to_owned());
+            }
+            if let Some(freq) = &opts.tpiu_freq {
+                int.tpiu_freq = Some(freq.to_owned());
+            }
+            if let Some(baud) = &opts.tpiu_baud {
+                int.tpiu_baud = Some(baud.to_owned());
+            }
+        };
+        if let Some(opts) = opts {
+            override_with_opts(&mut int, opts);
         }
 
         int.try_into()

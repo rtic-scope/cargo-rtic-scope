@@ -1,3 +1,4 @@
+use crate::manifest::ManifestProperties;
 use crate::recovery::{Metadata, TaskResolveMaps};
 use crate::sinks::{Sink, SinkError};
 use crate::TraceData;
@@ -84,6 +85,7 @@ impl FileSink {
     pub fn init<F>(
         &mut self,
         maps: TaskResolveMaps,
+        manip: ManifestProperties,
         comment: Option<String>,
         reset_fun: F,
     ) -> Result<Metadata, SinkError>
@@ -96,7 +98,7 @@ impl FileSink {
         // Create a trace file header with metadata (maps, reset
         // timestamp, trace clock frequency). Any bytes after this
         // sequence refers to trace packets.
-        let metadata = Metadata::new(maps, ts, freq, comment);
+        let metadata = Metadata::new(maps, manip, ts, freq, comment);
         {
             let json = serde_json::to_string(&metadata)?;
             self.file.write_all(json.as_bytes())

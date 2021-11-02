@@ -537,7 +537,7 @@ fn resolve_maps(
 ) -> Result<recovery::TaskResolveMaps, RTICScopeError> {
     // Find crate name, features and path to interrupt enum from
     // manifest metadata, or override options.
-    let manip = manifest::ManifestProperties::new(cargo, pac)?;
+    let manip = manifest::ManifestProperties::new(cargo, Some(pac))?;
 
     // Map IRQ numbers and DWT matches to their respective RTIC tasks
     let maps = recovery::TaskResolver::new(artifact, cargo, manip)?.resolve()?;
@@ -586,7 +586,7 @@ fn trace(
     )?;
 
     // Read the RTIC Scope manifest metadata block
-    let manip = manifest::ManifestProperties::new(cargo, &opts.pac)?;
+    let manip = manifest::ManifestProperties::new(cargo, Some(&opts.pac))?;
 
     let mut trace_source: Box<dyn sources::Source> = if let Some(dev) = &opts.serial {
         Box::new(sources::TTYSource::new(
@@ -600,7 +600,7 @@ fn trace(
     // Sample the timestamp of target reset, wait for trace clock
     // frequency payload, flush metadata to file.
     let metadata = trace_sink
-        .init(maps, opts.comment.clone(), || {
+        .init(maps, manip.clone(), opts.comment.clone(), || {
             // Reset the target to execute flashed binary
             trace_source.reset_target()?; // XXX halt-and-reset opt not handled
 
@@ -628,8 +628,10 @@ fn replay(
         } => {
             let src = sources::RawFileSource::new(fs::OpenOptions::new().read(true).open(file)?);
             let maps = resolve_maps(cargo, pac, artifact)?;
+            let manip = manifest::ManifestProperties::new(cargo, None)?;
             let metadata = recovery::Metadata::new(
                 maps,
+                manip,
                 chrono::Local::now(),
                 pac.tpiu_freq.unwrap(),
                 comment.clone(),
