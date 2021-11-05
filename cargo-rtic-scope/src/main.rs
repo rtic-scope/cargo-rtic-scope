@@ -449,7 +449,7 @@ fn run_loop(
                 }
                 api::EventType::Invalid(ref malformed) => {
                     stats.malformed += 1;
-                    log::err(format!("malformed packet: {}: {:?}", malformed, malformed));
+                    log::warn(format!("malformed packet: {}: {:?}", malformed, malformed));
                 },
                 api::EventType::Overflow => log::warn("Overflow detected! Packets may have been dropped and timestamps will be diverged until the next global timestamp".to_string()),
                 _ => (),
