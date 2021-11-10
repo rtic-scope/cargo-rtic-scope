@@ -108,6 +108,7 @@ struct ReplayOptions {
     #[structopt(name = "list", long = "list", short = "l")]
     list: bool,
 
+    /// Relative path to trace file to replay.
     #[structopt(name = "trace-file", long = "trace-file")]
     trace_file: Option<PathBuf>,
 
