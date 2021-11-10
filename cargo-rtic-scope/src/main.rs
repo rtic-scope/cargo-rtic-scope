@@ -8,8 +8,9 @@ use std::sync::{
     Arc,
 };
 
-use anyhow::{anyhow, Context};
+use anyhow::{bail, Context};
 use cargo_metadata::Artifact;
+use futures::{executor::block_on, select, stream, FutureExt, StreamExt};
 use probe_rs_cli_util::{
     common_options::{CargoOptions, FlashOptions},
     flash,
@@ -340,7 +341,13 @@ fn main_try() -> Result<(), RTICScopeError> {
 
     // All preparatory I/O and information recovery done. Forward all
     // trace packets to all sinks.
-    let retstatus = run_loop(source, sinks, metadata, &opts, artifact.target.name);
+    let retstatus = block_on(run_loop(
+        source,
+        sinks,
+        metadata,
+        &opts,
+        artifact.target.name,
+    ));
 
     // Wait for frontends to proccess all packets and echo its' stderr
     for (i, (child, stderr)) in children.iter_mut().enumerate() {
@@ -364,8 +371,8 @@ fn main_try() -> Result<(), RTICScopeError> {
     retstatus
 }
 
-fn run_loop(
-    mut source: Box<dyn sources::Source>,
+async fn run_loop(
+    source: Box<dyn sources::Source>,
     mut sinks: Vec<Box<dyn sinks::Sink>>,
     metadata: recovery::Metadata,
     opts: &Opts,
@@ -385,8 +392,7 @@ fn run_loop(
         sinks.drain(..).map(|s| (s, false)).collect();
     let sinks_at_start = sinks.len();
 
-    let mut retstatus = Ok(());
-    let mut buffer_warning = false;
+    let mut _buffer_warning = false;
 
     #[derive(Default)]
     struct Stats {
@@ -401,31 +407,7 @@ fn run_loop(
 
     let instant = std::time::Instant::now();
 
-    while let Some(data) = source.next() {
-        if halt.load(Ordering::SeqCst) {
-            break;
-        }
-
-        // Eventually warn about the source input buffer overflowing,
-        // but only once.
-        if !buffer_warning {
-            if let sources::BufferStatus::AvailWarn(avail, buf_sz) = source.avail_buffer() {
-                eprintln!(
-                    "Source buffer is almost full ({}/{} bytes free) and it not read quickly enough",
-                    avail, buf_sz
-                );
-                buffer_warning = true;
-            }
-        }
-
-        // Try to read data from the source. Failure is fatal.
-        let data = data.with_context(|| {
-            format!(
-                "Failed to read trace data from source {}",
-                source.describe()
-            )
-        })?;
-
+    let mut handle_packet = |data: TraceData| -> Result<(), anyhow::Error> {
         // Try to recover RTIC information for the packets.
         let chunk = metadata.build_event_chunk(data.clone());
 
@@ -472,8 +454,7 @@ fn run_loop(
         // TODO replace weth Vec::drain_filter when stable.
         sinks.retain(|(_, is_broken)| !is_broken);
         if sinks.is_empty() {
-            retstatus = Err(anyhow!("All sinks broken. Cannot continue."));
-            break;
+            bail!("All sinks are broken. Cannot continue.");
         }
 
         let duration = instant.elapsed();
@@ -516,12 +497,51 @@ fn run_loop(
                 sinks = format!("{}/{} sinks operational", sinks.len(), sinks_at_start),
             ),
         );
+
+        Ok(())
+    };
+
+    let mut source = stream::iter(source);
+    loop {
+        select! {
+            data = source.next().fuse() => match data {
+                Some(data) => {
+
+                    // XXX futures::Stream must be implemented for sources::Source
+                    // if !buffer_warning {
+                    //     if let sources::BufferStatus::AvailWarn(avail, buf_sz) = source.avail_buffer() {
+                    //         eprintln!(
+                    //             "Source buffer is almost full ({}/{} bytes free) and it not read quickly enough",
+                    //             avail, buf_sz
+                    //         );
+                    //         buffer_warning = true;
+                    //     }
+                    // }
+
+                    let data = data.context("Failed to read trace data from source")?;
+                    handle_packet(data)?;
+
+                    continue;
+                },
+                None => break,
+            },
+            // XXX consumes a whole CPU spinning here, can we use a
+            // notification channel instead? Would that be more
+            // performant?
+            halt = async { halt.load(Ordering::SeqCst) }.fuse() => {
+                if halt {
+                    break;
+                } else {
+                    continue;
+                }
+            }
+        };
     }
 
     // close frontend sockets
     drop(sinks);
 
-    retstatus.map_err(|e| e.into())
+    Ok(())
 }
 
 type TraceTuple = (
