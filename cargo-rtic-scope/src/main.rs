@@ -108,7 +108,10 @@ struct ReplayOptions {
     #[structopt(name = "list", long = "list", short = "l")]
     list: bool,
 
-    #[structopt(required_unless_one(&["list", "raw-file"]))]
+    #[structopt(name = "trace-file", long = "trace-file")]
+    trace_file: Option<PathBuf>,
+
+    #[structopt(required_unless_one(&["list", "raw-file", "trace-file"]))]
     index: Option<usize>,
 
     #[structopt(flatten)]
@@ -679,6 +682,14 @@ fn replay(
             Ok(None)
         }
         ReplayOptions {
+            trace_file: Some(file),
+            ..
+        } => {
+            let src = sources::FileSource::new(fs::OpenOptions::new().read(true).open(&file)?)?;
+            let metadata = src.metadata();
+            Ok(Some((Box::new(src), vec![], metadata)))
+        }
+        ReplayOptions {
             index: Some(idx),
             trace_dir,
             ..
@@ -692,7 +703,6 @@ fn replay(
                 .nth(*idx)
                 .with_context(|| format!("No trace with index {}", *idx))?;
 
-            // open trace file and print packets
             let src = sources::FileSource::new(fs::OpenOptions::new().read(true).open(&trace)?)?;
             let metadata = src.metadata();
 
