@@ -33,7 +33,8 @@ pub type TraceData = itm_decode::TimestampedTracePackets;
 
 #[derive(Debug, StructOpt)]
 struct Opts {
-    /// The frontend to forward recorded/replayed trace to.
+    /// PATH, relative, or absolute path to the frontend(s) to forward
+    /// recorded/replayed trace to. Tested in that order.
     #[structopt(long = "frontend", short = "-F", default_value = "dummy")]
     frontends: Vec<String>,
 
@@ -305,12 +306,27 @@ fn main_try() -> Result<(), RTICScopeError> {
     // Spawn frontend children and get path to sockets. Create and push sinks.
     let mut children = vec![];
     for frontend in &opts.frontends {
-        let executable = format!("rtic-scope-frontend-{}", frontend);
-        let mut child = process::Command::new(&executable)
-            .stdout(process::Stdio::piped())
-            .stderr(process::Stdio::piped())
-            .spawn()
-            .with_context(|| format!("Failed to spawn frontend child process {}", executable))?;
+        // Try to spawn the frontend from PATH. If that fails, try a relative path instead.
+        let executables = [
+            format!("rtic-scope-frontend-{}", frontend), // PATH
+            format!("./{}", frontend),                   // relative
+            format!("/{}", frontend),                    // absolute
+        ];
+        let mut child = executables
+            .iter()
+            .find_map(|e| {
+                process::Command::new(e)
+                    .stdout(process::Stdio::piped())
+                    .stderr(process::Stdio::piped())
+                    .spawn()
+                    .ok()
+            })
+            .with_context(|| {
+                format!(
+                    "Failed to spawn a frontend child process from tested paths (PATH, relative, absolute): {:#?}",
+                    executables
+                )
+            })?;
         {
             let socket_path = {
                 std::io::BufReader::new(
