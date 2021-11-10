@@ -16,7 +16,9 @@ impl FrontendSink {
 
 impl Sink for FrontendSink {
     fn drain(&mut self, _: TraceData, chunk: api::EventChunk) -> Result<(), SinkError> {
-        let json = serde_json::to_string(&chunk)?;
+        let json = serde_json::to_string(&chunk)?
+        // reportedly required for async frontends
+        + "\n";
 
         self.socket
             .write_all(json.as_bytes())
