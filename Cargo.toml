@@ -1,6 +1,6 @@
 [package]
 name = "rtic-scope-api"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 authors = ["Viktor Sonesten <v@tmplt.dev>"]
 edition = "2018"
 repository = "https://github.com/rtic-scope/api"
