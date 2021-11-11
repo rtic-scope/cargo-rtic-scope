@@ -31,5 +31,17 @@ for manifest in manifests/*.toml; do
     done < ./out/$manifest.run
 done
 
+# Test expected trace output
+for tracefile in traces/*.trace; do
+    PATH=$PATH:$HOME/.cargo/bin
+    out=$($rtic_scope replay --trace-file $tracefile 2>&1)
+    name=$(basename "$tracefile" .trace)
+
+    # for each (fixed) expected string, ensure it's in the output.
+    while read line; do
+        echo "$out" | grep -F "$line" >/dev/null || exit 1
+    done < ./out/trace-$name.run
+done
+
 popd >/dev/null
 exit 0
