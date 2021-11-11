@@ -68,6 +68,7 @@ impl diag::DiagnosableError for RecoveryError {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Metadata {
+    program_name: String,
     maps: TaskResolveMaps,
     manip: ManifestProperties,
     timestamp: chrono::DateTime<Local>,
@@ -77,6 +78,7 @@ pub struct Metadata {
 
 impl Metadata {
     pub fn new(
+        program_name: String,
         maps: TaskResolveMaps,
         manip: ManifestProperties,
         timestamp: chrono::DateTime<Local>,
@@ -84,6 +86,7 @@ impl Metadata {
         comment: Option<String>,
     ) -> Self {
         Self {
+            program_name,
             maps,
             manip,
             timestamp,
@@ -102,6 +105,10 @@ impl Metadata {
 
     pub fn comment(&self) -> String {
         self.comment.clone().unwrap_or("".to_string())
+    }
+
+    pub fn program_name(&self) -> String {
+        self.program_name.clone()
     }
 
     pub fn build_event_chunk(&self, packets: TimestampedTracePackets) -> EventChunk {

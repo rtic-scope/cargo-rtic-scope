@@ -35,6 +35,8 @@ pub enum CargoError {
     CargoBuildSpawnWaitError(#[source] std::io::Error),
     #[error("Failed to read stdout message from cargo: {0}")]
     StdoutError(#[source] std::io::Error),
+    #[error("Failed to resolve the current directory: {0}")]
+    CurrentDirError(#[source] std::io::Error),
 }
 
 impl CargoError {

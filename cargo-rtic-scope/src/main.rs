@@ -27,7 +27,7 @@ mod recovery;
 mod sinks;
 mod sources;
 
-use build::CargoWrapper;
+use build::{CargoError, CargoWrapper};
 
 pub type TraceData = itm_decode::TimestampedTracePackets;
 
@@ -210,13 +210,13 @@ impl RTICScopeError {
 }
 
 fn main() {
-    if let Err(e) = main_try() {
+    if let Err(e) = block_on(main_try()) {
         e.render();
         std::process::exit(1); // TODO make retval depend on error type?
     }
 }
 
-fn main_try() -> Result<(), RTICScopeError> {
+async fn main_try() -> Result<(), RTICScopeError> {
     // Handle CLI options
     let mut args: Vec<_> = std::env::args().collect();
     // When called by cargo, first argument will be "rtic-scope".
@@ -240,44 +240,28 @@ fn main_try() -> Result<(), RTICScopeError> {
     // Build RTIC application to be traced, and create a wrapper around
     // cargo, reusing the target directory of the application.
     log::status("Building", "RTIC target application...".to_string());
-    let (cargo, artifact) = CargoWrapper::new(
-        &env::current_dir()?,
-        {
-            match &opts.cmd {
-                Command::Trace(opts) => &opts.flash_options.cargo_options,
-                Command::Replay(opts) => &opts.cargo_options,
+    let cart = async {
+        Ok(CargoWrapper::new(
+            &env::current_dir().map_err(CargoError::CurrentDirError)?,
+            {
+                match &opts.cmd {
+                    Command::Trace(opts) => &opts.flash_options.cargo_options,
+                    Command::Replay(opts) => &opts.cargo_options,
+                }
             }
-        }
-        .to_cargo_options(),
-    )?;
-
-    let prog = format!("{} ({})", artifact.target.name, artifact.target.src_path,);
-    let preparing_target = match opts.cmd {
-        Command::Trace(ref opts) => !opts.resolve_only,
-        Command::Replay(_) => false,
+            .to_cargo_options(),
+        )?)
     };
-    log::status(
-        "Recovering",
-        format!(
-            "metadata for {}{}",
-            prog,
-            if preparing_target {
-                " and preparing target..."
-            } else {
-                "..."
-            }
-        ),
-    );
 
     // Configure source and sinks. Recover the information we need to
     // map IRQ numbers to RTIC tasks.
     let (source, mut sinks, metadata) = match opts.cmd {
-        Command::Trace(ref opts) => match trace(opts, &cargo, &artifact)? {
+        Command::Trace(ref opts) => match trace(opts, cart).await? {
             Some(tup) => tup,
             None => return Ok(()),
         },
         Command::Replay(ref opts) => {
-            match replay(opts, &cargo, &artifact).with_context(|| {
+            match replay(opts, cart).await.with_context(|| {
                 format!("Failed to {}", {
                     if opts.list {
                         "index traces"
@@ -291,17 +275,6 @@ fn main_try() -> Result<(), RTICScopeError> {
             }
         }
     };
-
-    log::status(
-        "Recovered",
-        format!(
-            "{ntotal} task(s) from {prog}: {nhard} hard, {nsoft} soft. Target reset and flashed.",
-            ntotal = metadata.hardware_tasks() + metadata.software_tasks(),
-            prog = artifact.target.name,
-            nhard = metadata.hardware_tasks(),
-            nsoft = metadata.software_tasks()
-        ),
-    );
 
     // Spawn frontend children and get path to sockets. Create and push sinks.
     let mut children = vec![];
@@ -361,13 +334,7 @@ fn main_try() -> Result<(), RTICScopeError> {
 
     // All preparatory I/O and information recovery done. Forward all
     // trace packets to all sinks.
-    let retstatus = block_on(run_loop(
-        source,
-        sinks,
-        metadata,
-        &opts,
-        artifact.target.name,
-    ));
+    let retstatus = run_loop(source, sinks, metadata, &opts).await;
 
     // Wait for frontends to proccess all packets and echo its' stderr
     for (i, (child, stderr)) in children.iter_mut().enumerate() {
@@ -396,7 +363,6 @@ async fn run_loop(
     mut sinks: Vec<Box<dyn sinks::Sink>>,
     metadata: recovery::Metadata,
     opts: &Opts,
-    prog: String,
 ) -> Result<(), RTICScopeError> {
     // Setup SIGINT handler
     let halt = Arc::new(AtomicBool::new(false));
@@ -485,7 +451,7 @@ async fn run_loop(
             },
             format!(
                 "{}: {} packets processed in {time} (~{packets_per_sec} packets/s; {} malformed, {} non-mappable); {sinks}...",
-                prog,
+                metadata.program_name(),
                 stats.packets,
                 stats.malformed,
                 stats.nonmappable,
@@ -585,12 +551,24 @@ fn resolve_maps(
     Ok(maps)
 }
 
-fn trace(
+async fn trace(
     opts: &TraceOptions,
-    cargo: &CargoWrapper,
-    artifact: &Artifact,
+    cart: impl futures::Future<Output = Result<(CargoWrapper, Artifact), CargoError>>,
 ) -> Result<Option<TraceTuple>, RTICScopeError> {
-    let maps = resolve_maps(cargo, &opts.pac, artifact)?;
+    let (cargo, artifact) = cart.await?;
+    let prog = format!("{} ({})", artifact.target.name, artifact.target.src_path,);
+    log::status(
+        "Recovering",
+        format!("metadata for {}{}", prog, {
+            if opts.resolve_only {
+                "..."
+            } else {
+                " and preparing target..."
+            }
+        }),
+    );
+
+    let maps = resolve_maps(&cargo, &opts.pac, &artifact)?;
     if opts.resolve_only {
         println!("{}", maps);
         return Ok(None);
@@ -604,7 +582,7 @@ fn trace(
 
     // TODO make this into Sink::generate().remove_old(), etc.?
     let mut trace_sink = sinks::FileSink::generate_trace_file(
-        artifact,
+        &artifact,
         opts.trace_dir
             .as_ref()
             .unwrap_or(&cargo.target_dir().join("rtic-traces")),
@@ -626,7 +604,7 @@ fn trace(
     )?;
 
     // Read the RTIC Scope manifest metadata block
-    let manip = manifest::ManifestProperties::new(cargo, Some(&opts.pac))?;
+    let manip = manifest::ManifestProperties::new(&cargo, Some(&opts.pac))?;
 
     let mut trace_source: Box<dyn sources::Source> = if let Some(dev) = &opts.serial {
         Box::new(sources::TTYSource::new(
@@ -640,21 +618,37 @@ fn trace(
     // Sample the timestamp of target reset, wait for trace clock
     // frequency payload, flush metadata to file.
     let metadata = trace_sink
-        .init(maps, manip.clone(), opts.comment.clone(), || {
-            // Reset the target to execute flashed binary
-            trace_source.reset_target(opts.flash_options.reset_halt)?;
+        .init(
+            artifact.target.name,
+            maps,
+            manip.clone(),
+            opts.comment.clone(),
+            || {
+                // Reset the target to execute flashed binary
+                trace_source.reset_target(opts.flash_options.reset_halt)?;
 
-            Ok(manip.tpiu_freq)
-        })
+                Ok(manip.tpiu_freq)
+            },
+        )
         .context("Failed to initialize metadata")?;
+
+    log::status(
+        "Recovered",
+        format!(
+            "{ntotal} task(s) from {prog}: {nhard} hard, {nsoft} soft. Target reset and flashed.",
+            ntotal = metadata.hardware_tasks() + metadata.software_tasks(),
+            prog = metadata.program_name(),
+            nhard = metadata.hardware_tasks(),
+            nsoft = metadata.software_tasks()
+        ),
+    );
 
     Ok(Some((trace_source, vec![Box::new(trace_sink)], metadata)))
 }
 
-fn replay(
+async fn replay(
     opts: &ReplayOptions,
-    cargo: &CargoWrapper,
-    artifact: &Artifact,
+    cart: impl futures::Future<Output = Result<(CargoWrapper, Artifact), CargoError>>,
 ) -> Result<Option<TraceTuple>, RTICScopeError> {
     match opts {
         ReplayOptions {
@@ -667,9 +661,11 @@ fn replay(
             ..
         } => {
             let src = sources::RawFileSource::new(fs::OpenOptions::new().read(true).open(file)?);
-            let maps = resolve_maps(cargo, pac, artifact)?;
-            let manip = manifest::ManifestProperties::new(cargo, None)?;
+            let (cargo, artifact) = cart.await?;
+            let maps = resolve_maps(&cargo, pac, &artifact)?;
+            let manip = manifest::ManifestProperties::new(&cargo, None)?;
             let metadata = recovery::Metadata::new(
+                artifact.target.name,
                 maps,
                 manip,
                 chrono::Local::now(),
@@ -685,9 +681,14 @@ fn replay(
             ..
         } => {
             let traces = sinks::file::find_trace_files(
-                trace_dir
-                    .clone()
-                    .unwrap_or(cargo.target_dir().join("rtic-traces")),
+                trace_dir.clone().unwrap_or(
+                    cargo_metadata::MetadataCommand::new()
+                        .exec()
+                        .context("cargo metadata command failed")?
+                        .target_directory
+                        .join("rtic-traces")
+                        .into(),
+                ),
             )?;
             for (i, trace) in traces.enumerate() {
                 let metadata =
@@ -712,9 +713,14 @@ fn replay(
             ..
         } => {
             let mut traces = sinks::file::find_trace_files(
-                trace_dir
-                    .clone()
-                    .unwrap_or(cargo.target_dir().join("rtic-traces")),
+                trace_dir.clone().unwrap_or(
+                    cargo_metadata::MetadataCommand::new()
+                        .exec()
+                        .context("cargo metadata command failed")?
+                        .target_directory
+                        .join("rtic-traces")
+                        .into(),
+                ),
             )?;
             let trace = traces
                 .nth(*idx)
