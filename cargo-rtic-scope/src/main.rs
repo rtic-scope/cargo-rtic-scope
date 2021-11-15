@@ -185,7 +185,7 @@ impl diag::DiagnosableError for RTICScopeError {
 
 impl RTICScopeError {
     pub fn render(&self) {
-        log::err(format!("{}", self)); // XXX only prints top-level error
+        log::err(format!("{:#?}", self)); // TODO iterator over errors instead
 
         // print eventual hints
         // XXX should we anyhow::Error::downcast somehow instead?
