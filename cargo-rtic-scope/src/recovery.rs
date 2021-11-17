@@ -2,7 +2,7 @@ use crate::build::{self, CargoWrapper};
 use crate::diag;
 use crate::manifest::ManifestProperties;
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Write;
 
@@ -172,8 +172,8 @@ impl TraceLookupMaps {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 struct SoftwareMap {
     pub task_dispatchers: HashSet<VectActive>,
-    pub comparators: BTreeMap<usize, TaskAction>,
-    pub map: BTreeMap<usize, Vec<String>>,
+    pub comparators: HashMap<usize, TaskAction>,
+    pub map: HashMap<usize, Vec<String>>,
 }
 impl SoftwareMap {
     pub fn from(
@@ -210,7 +210,7 @@ impl SoftwareMap {
         })
     }
 
-    fn parse_ast(app: TokenStream) -> BTreeMap<usize, Vec<String>> {
+    fn parse_ast(app: TokenStream) -> HashMap<usize, Vec<String>> {
         struct TaskIDGenerator(usize);
         impl TaskIDGenerator {
             pub fn new() -> Self {
@@ -228,13 +228,13 @@ impl SoftwareMap {
 
         let app = syn::parse2::<syn::Item>(app).unwrap();
         let mut ctx: Vec<syn::Ident> = vec![];
-        let mut assocs = BTreeMap::<usize, Vec<String>>::new();
+        let mut assocs = HashMap::<usize, Vec<String>>::new();
         let mut id_gen = TaskIDGenerator::new();
 
         fn traverse_item(
             item: &syn::Item,
             ctx: &mut Vec<syn::Ident>,
-            assocs: &mut BTreeMap<usize, Vec<String>>,
+            assocs: &mut HashMap<usize, Vec<String>>,
             id_gen: &mut TaskIDGenerator,
         ) {
             match item {
@@ -393,7 +393,7 @@ fn resolve_int_nrs(
     cargo: &CargoWrapper,
     pacp: &ManifestProperties,
     binds: Vec<String>,
-) -> Result<BTreeMap<String, VectActive>, RecoveryError> {
+) -> Result<HashMap<String, VectActive>, RecoveryError> {
     const ADHOC_FUNC_PREFIX: &str = "rtic_scope_func_";
 
     // Extract adhoc source to a temporary directory and apply adhoc
