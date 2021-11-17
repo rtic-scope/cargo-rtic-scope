@@ -118,7 +118,7 @@ impl TryInto<ManifestProperties> for ManifestPropertiesIntermediate {
             interrupt_path: self
                 .interrupt_path
                 .ok_or(Self::Error::MissingInterruptPath)?,
-            pac_features: self.pac_features.unwrap_or([].to_vec()),
+            pac_features: self.pac_features.unwrap_or_else(|| [].to_vec()),
             tpiu_freq: self.tpiu_freq.ok_or(Self::Error::MissingFreq)?,
             tpiu_baud: self.tpiu_baud.ok_or(Self::Error::MissingBaud)?,
             dwt_enter_id: self.dwt_enter_id.ok_or(Self::Error::MissingDWTUnit)?,

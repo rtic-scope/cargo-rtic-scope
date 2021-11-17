@@ -135,8 +135,8 @@ impl TraceLookupMaps {
         Ok(Some(
             self.hardware
                 .0
-                .get(&veca)
-                .ok_or(RecoveryError::MissingHardwareMapping(veca.to_owned()))?
+                .get(veca)
+                .ok_or_else(|| RecoveryError::MissingHardwareMapping(veca.to_owned()))?
                 .join("::"),
         ))
     }
@@ -144,7 +144,7 @@ impl TraceLookupMaps {
     pub fn resolve_software_task(
         &self,
         comp: &u8,
-        value: &Vec<u8>,
+        value: &[u8],
     ) -> Result<Option<EventType>, RecoveryError> {
         if let Some(action) = self.software.comparators.get(&(*comp as usize)) {
             if value.iter().filter(|&b| *b > 0).count() > 1 || value.is_empty() {
@@ -159,12 +159,12 @@ impl TraceLookupMaps {
                 .ok_or(RecoveryError::MissingSoftwareMapping(value))?
                 .join("::");
 
-            return Ok(Some(EventType::Task {
+            Ok(Some(EventType::Task {
                 name,
                 action: action.to_owned(),
-            }));
+            }))
         } else {
-            return Ok(None);
+            Ok(None)
         }
     }
 }
@@ -389,7 +389,7 @@ impl HardwareMap {
     }
 }
 
-fn resolve_int_nrs<'a>(
+fn resolve_int_nrs(
     cargo: &CargoWrapper,
     pacp: &ManifestProperties,
     binds: Vec<String>,
@@ -586,7 +586,7 @@ impl TraceMetadata {
                         Ok(None) => {
                             events.push(EventType::Unknown(packet.clone()));
                             continue;
-                        },
+                        }
                         Err(e) => {
                             events.push(EventType::Unmappable(packet.clone(), e.to_string()));
                             continue;

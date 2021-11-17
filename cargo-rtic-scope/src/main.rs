@@ -240,6 +240,7 @@ async fn main_try() -> Result<(), RTICScopeError> {
     // Build RTIC application to be traced, and create a wrapper around
     // cargo, reusing the target directory of the application.
     log::status("Building", "RTIC target application...".to_string());
+    #[allow(clippy::needless_question_mark)]
     let cart = async {
         Ok(CargoWrapper::new(
             &env::current_dir().map_err(CargoError::CurrentDirError)?,

@@ -4,7 +4,7 @@ use crate::TraceData;
 use std::fs;
 
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use cargo_metadata::Artifact;
 use chrono::prelude::*;
@@ -21,7 +21,7 @@ pub struct FileSink {
 impl FileSink {
     pub fn generate_trace_file(
         artifact: &Artifact,
-        trace_dir: &PathBuf,
+        trace_dir: &Path,
         remove_prev_traces: bool,
     ) -> Result<Self, SinkError> {
         if remove_prev_traces {
