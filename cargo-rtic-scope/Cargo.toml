@@ -30,6 +30,7 @@ thiserror = "1"
 colored = "2"
 crossterm = "0.20"
 futures = "0.3"
+cortex-m = { version = "0.7", default-features = false, features = ["serde", "std-map"] }
 
 [dependencies.probe-rs]
 version = "0.11"

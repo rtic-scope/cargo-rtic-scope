@@ -361,7 +361,7 @@ async fn main_try() -> Result<(), RTICScopeError> {
 async fn run_loop(
     source: Box<dyn sources::Source>,
     mut sinks: Vec<Box<dyn sinks::Sink>>,
-    metadata: recovery::Metadata,
+    metadata: recovery::TraceMetadata,
     opts: &Opts,
 ) -> Result<(), RTICScopeError> {
     // Setup SIGINT handler
@@ -451,7 +451,7 @@ async fn run_loop(
             },
             format!(
                 "{}: {} packets processed in {time} (~{packets_per_sec} packets/s; {} malformed, {} non-mappable); {sinks}...",
-                metadata.program_name(),
+                metadata.program_name,
                 stats.packets,
                 stats.malformed,
                 stats.nonmappable,
@@ -533,23 +533,8 @@ async fn run_loop(
 type TraceTuple = (
     Box<dyn sources::Source>,
     Vec<Box<dyn sinks::Sink>>,
-    recovery::Metadata,
+    recovery::TraceMetadata,
 );
-
-fn resolve_maps(
-    cargo: &CargoWrapper,
-    pac: &ManifestOptions,
-    artifact: &Artifact,
-) -> Result<recovery::TaskResolveMaps, RTICScopeError> {
-    // Find crate name, features and path to interrupt enum from
-    // manifest metadata, or override options.
-    let manip = manifest::ManifestProperties::new(cargo, Some(pac))?;
-
-    // Map IRQ numbers and DWT matches to their respective RTIC tasks
-    let maps = recovery::TaskResolver::new(artifact, cargo, manip)?.resolve()?;
-
-    Ok(maps)
-}
 
 async fn trace(
     opts: &TraceOptions,
@@ -568,9 +553,14 @@ async fn trace(
         }),
     );
 
-    let maps = resolve_maps(&cargo, &opts.pac, &artifact)?;
+    // Read the RTIC Scope manifest metadata block
+    let manip = manifest::ManifestProperties::new(&cargo, Some(&opts.pac))?;
+
+    // Build the translation maps
+    let maps = recovery::TraceLookupMaps::from(&cargo, &artifact, &manip)?;
+
     if opts.resolve_only {
-        println!("{}", maps);
+        println!("{:#?}", maps);
         return Ok(None);
     }
 
@@ -603,9 +593,6 @@ async fn trace(
         flashloader,
     )?;
 
-    // Read the RTIC Scope manifest metadata block
-    let manip = manifest::ManifestProperties::new(&cargo, Some(&opts.pac))?;
-
     let mut trace_source: Box<dyn sources::Source> = if let Some(dev) = &opts.serial {
         Box::new(sources::TTYSource::new(
             sources::tty::configure(dev).with_context(|| format!("Failed to configure {}", dev))?,
@@ -615,31 +602,24 @@ async fn trace(
         Box::new(sources::ProbeSource::new(session, &manip)?)
     };
 
-    // Sample the timestamp of target reset, wait for trace clock
-    // frequency payload, flush metadata to file.
+    // Sample the timestamp of target and flush metadata to file.
     let metadata = trace_sink
-        .init(
-            artifact.target.name,
-            maps,
-            manip.clone(),
-            opts.comment.clone(),
-            || {
-                // Reset the target to execute flashed binary
-                trace_source.reset_target(opts.flash_options.reset_halt)?;
+        .init(artifact.target.name, maps, opts.comment.clone(), || {
+            // Reset the target to execute flashed binary
+            trace_source.reset_target(opts.flash_options.reset_halt)?;
 
-                Ok(manip.tpiu_freq)
-            },
-        )
+            Ok(manip.tpiu_freq)
+        })
         .context("Failed to initialize metadata")?;
 
     log::status(
         "Recovered",
         format!(
             "{ntotal} task(s) from {prog}: {nhard} hard, {nsoft} soft. Target reset and flashed.",
-            ntotal = metadata.hardware_tasks() + metadata.software_tasks(),
-            prog = metadata.program_name(),
-            nhard = metadata.hardware_tasks(),
-            nsoft = metadata.software_tasks()
+            ntotal = metadata.hardware_tasks_len() + metadata.software_tasks_len(),
+            prog = metadata.program_name,
+            nhard = metadata.hardware_tasks_len(),
+            nsoft = metadata.software_tasks_len()
         ),
     );
 
@@ -662,14 +642,13 @@ async fn replay(
         } => {
             let src = sources::RawFileSource::new(fs::OpenOptions::new().read(true).open(file)?);
             let (cargo, artifact) = cart.await?;
-            let maps = resolve_maps(&cargo, pac, &artifact)?;
             let manip = manifest::ManifestProperties::new(&cargo, None)?;
-            let metadata = recovery::Metadata::new(
+            let maps = recovery::TraceLookupMaps::from(&cargo, &artifact, &manip)?;
+            let metadata = recovery::TraceMetadata::from(
                 artifact.target.name,
                 maps,
-                manip,
                 chrono::Local::now(),
-                pac.tpiu_freq.unwrap(),
+                pac.tpiu_freq.unwrap_or(manip.tpiu_freq),
                 comment.clone(),
             );
 
@@ -694,7 +673,7 @@ async fn replay(
                 let metadata =
                     sources::FileSource::new(fs::OpenOptions::new().read(true).open(&trace)?)?
                         .metadata();
-                println!("{}\t{}\t{}", i, trace.display(), metadata.comment());
+                println!("{}\t{}\t{:?}", i, trace.display(), metadata.comment);
             }
 
             Ok(None)
