@@ -243,6 +243,7 @@ dependencies = [
  "syn",
  "tempfile",
  "thiserror",
+ "vectorize",
 ]
 
 [[package]]
@@ -1563,7 +1564,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da3d56009c8f32e4f208dbea17df72484154d1040a8969b75d8c73eb7b18fe8f"
 dependencies = [
  "bare-metal",
- "cortex-m 0.6.7",
+ "cortex-m 0.7.3",
  "vcell",
 ]
 
@@ -1790,6 +1791,15 @@ name = "vec_map"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
+
+[[package]]
+name = "vectorize"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25e3bbfdfdcc4ea60ce183b1b45c936aacd69fe097ebf137984a32faf80e365b"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "version_check"

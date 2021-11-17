@@ -172,7 +172,9 @@ impl TraceLookupMaps {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 struct SoftwareMap {
     pub task_dispatchers: HashSet<VectActive>,
+    #[serde(with = "vectorize")]
     pub comparators: HashMap<usize, TaskAction>,
+    #[serde(with = "vectorize")]
     pub map: HashMap<usize, Vec<String>>,
 }
 impl SoftwareMap {
@@ -300,7 +302,7 @@ impl SoftwareMap {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
-struct HardwareMap(HashMap<VectActive, Vec<String>>);
+struct HardwareMap(#[serde(with = "vectorize")] HashMap<VectActive, Vec<String>>);
 impl HardwareMap {
     pub fn from(
         app: &rtic_syntax::ast::App,
