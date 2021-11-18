@@ -221,11 +221,13 @@ dependencies = [
  "chrono",
  "clap",
  "colored",
+ "cortex-m 0.7.3",
  "crossterm",
  "ctrlc",
  "futures",
  "git2",
  "include_dir",
+ "indexmap",
  "itm-decode",
  "libloading",
  "nix 0.21.2",
@@ -242,6 +244,7 @@ dependencies = [
  "syn",
  "tempfile",
  "thiserror",
+ "vectorize",
 ]
 
 [[package]]
@@ -358,11 +361,12 @@ dependencies = [
 [[package]]
 name = "cortex-m"
 version = "0.7.3"
-source = "git+https://github.com/rtic-scope/cortex-m.git?branch=feat/tracing#880b947c44e78fd07d7c231a3c0c82ed3e54b9ef"
+source = "git+https://github.com/rtic-scope/cortex-m.git?branch=feat/host-feats#8470068c820b72e4df3b12dae3d9f7209303cb73"
 dependencies = [
  "bare-metal",
  "bitfield",
  "embedded-hal",
+ "serde",
  "volatile-register",
 ]
 
@@ -740,6 +744,7 @@ checksum = "bc633605454125dec4b66843673f01c7df2b89479b32e0ed634e43a91cff62a5"
 dependencies = [
  "autocfg",
  "hashbrown",
+ "serde",
 ]
 
 [[package]]
@@ -1334,8 +1339,8 @@ dependencies = [
 
 [[package]]
 name = "rtic-scope-api"
-version = "0.1.0-alpha.0"
-source = "git+https://github.com/rtic-scope/api.git#22ae2d5bec481e023aec603584f979a7426e092e"
+version = "0.1.0-alpha.1"
+source = "git+https://github.com/rtic-scope/api.git#5ba0c7bd85f8a68201d335119e0ab90f61b6685b"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1788,6 +1793,15 @@ name = "vec_map"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
+
+[[package]]
+name = "vectorize"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25e3bbfdfdcc4ea60ce183b1b45c936aacd69fe097ebf137984a32faf80e365b"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "version_check"

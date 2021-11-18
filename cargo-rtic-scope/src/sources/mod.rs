@@ -17,6 +17,7 @@ pub enum BufferStatus {
     NotApplicable,
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Error)]
 pub enum SourceError {
     #[error("Failed to setup source: {0}")]

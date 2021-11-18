@@ -1,4 +1,4 @@
-use crate::recovery::Metadata;
+use crate::recovery::TraceMetadata;
 use crate::sources::{BufferStatus, Source, SourceError};
 use crate::TraceData;
 
@@ -8,7 +8,7 @@ use std::io::BufReader;
 /// Something data is deserialized from. Always a file.
 pub struct FileSource {
     reader: BufReader<fs::File>,
-    metadata: Metadata,
+    metadata: TraceMetadata,
 }
 
 impl FileSource {
@@ -16,7 +16,7 @@ impl FileSource {
         let mut reader = BufReader::new(fd);
         let metadata = {
             let mut stream =
-                serde_json::Deserializer::from_reader(&mut reader).into_iter::<Metadata>();
+                serde_json::Deserializer::from_reader(&mut reader).into_iter::<TraceMetadata>();
             if let Some(Ok(metadata)) = stream.next() {
                 metadata
             } else {
@@ -29,7 +29,7 @@ impl FileSource {
         Ok(Self { reader, metadata })
     }
 
-    pub fn metadata(&self) -> Metadata {
+    pub fn metadata(&self) -> TraceMetadata {
         self.metadata.clone()
     }
 }

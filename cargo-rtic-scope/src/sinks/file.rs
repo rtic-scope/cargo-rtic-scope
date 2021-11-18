@@ -1,11 +1,10 @@
-use crate::manifest::ManifestProperties;
-use crate::recovery::{Metadata, TaskResolveMaps};
+use crate::recovery::{TraceLookupMaps, TraceMetadata};
 use crate::sinks::{Sink, SinkError};
 use crate::TraceData;
 use std::fs;
 
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use cargo_metadata::Artifact;
 use chrono::prelude::*;
@@ -22,7 +21,7 @@ pub struct FileSink {
 impl FileSink {
     pub fn generate_trace_file(
         artifact: &Artifact,
-        trace_dir: &PathBuf,
+        trace_dir: &Path,
         remove_prev_traces: bool,
     ) -> Result<Self, SinkError> {
         if remove_prev_traces {
@@ -85,11 +84,10 @@ impl FileSink {
     pub fn init<F>(
         &mut self,
         program_name: String,
-        maps: TaskResolveMaps,
-        manip: ManifestProperties,
+        maps: TraceLookupMaps,
         comment: Option<String>,
         reset_fun: F,
-    ) -> Result<Metadata, SinkError>
+    ) -> Result<TraceMetadata, SinkError>
     where
         F: FnOnce() -> Result<u32, crate::sources::SourceError>,
     {
@@ -99,7 +97,7 @@ impl FileSink {
         // Create a trace file header with metadata (maps, reset
         // timestamp, trace clock frequency). Any bytes after this
         // sequence refers to trace packets.
-        let metadata = Metadata::new(program_name, maps, manip, ts, freq, comment);
+        let metadata = TraceMetadata::from(program_name, maps, ts, freq, comment);
         {
             let json = serde_json::to_string(&metadata)?;
             self.file.write_all(json.as_bytes())

@@ -37,30 +37,25 @@ impl Default for ManifestPropertiesIntermediate {
 
 impl ManifestPropertiesIntermediate {
     pub fn complete_with(&mut self, other: Self) {
-        if self.pac_name.is_none() {
-            self.pac_name = other.pac_name;
+        macro_rules! complete {
+            ($($f:ident),+) => {{
+                $(
+                    if self.$f.is_none() {
+                        self.$f = other.$f;
+                    }
+                )+
+            }}
         }
-        if self.pac_version.is_none() {
-            self.pac_version = other.pac_version;
-        }
-        if self.interrupt_path.is_none() {
-            self.interrupt_path = other.interrupt_path;
-        }
-        if self.pac_features.is_none() {
-            self.pac_features = other.pac_features;
-        }
-        if self.tpiu_freq.is_none() {
-            self.tpiu_freq = other.tpiu_freq;
-        }
-        if self.tpiu_baud.is_none() {
-            self.tpiu_baud = other.tpiu_baud;
-        }
-        if self.dwt_enter_id.is_none() {
-            self.dwt_enter_id = other.dwt_enter_id;
-        }
-        if self.dwt_exit_id.is_none() {
-            self.dwt_exit_id = other.dwt_exit_id;
-        }
+        complete!(
+            pac_name,
+            pac_version,
+            pac_features,
+            interrupt_path,
+            tpiu_freq,
+            tpiu_baud,
+            dwt_enter_id,
+            dwt_exit_id
+        );
     }
 }
 
@@ -100,8 +95,8 @@ impl diag::DiagnosableError for ManifestMetadataError {
             Self::MissingName => vec!["Add `pac_name = \"<your PAC name>\"` to [package.metadata.rtic-scope] in Cargo.toml or specify --pac-name".into()],
             Self::MissingVersion => vec!["Add `pac_version = \"your PAC version\"` to [package.metadata.rtic-scope] in Cargo.toml or specify --pac-version".into()],
             Self::MissingInterruptPath => vec!["Add `interrupt_path = \"path to your PAC's Interrupt enum\"` to [package.metadata.rtic-scope] in Cargo.toml or specify --pac-interrupt-path".into()],
-            Self::MissingFreq => vec!["Add `tpiu_freq = \"your TPIU frequency\" to [package.metadata.rtic-scope] in Cargo.toml or specify --tpiu-freq`".into()],
-            Self::MissingBaud => vec!["Add `tpiu_baud = \"your TPIU baud rate\" to [package.metadata.rtic-scope] in Cargo.toml or specify --tpiu-baud`".into()],
+            Self::MissingFreq => vec!["Add `tpiu_freq = \"your TPIU frequency\"` to [package.metadata.rtic-scope] in Cargo.toml or specify --tpiu-freq".into()],
+            Self::MissingBaud => vec!["Add `tpiu_baud = \"your TPIU baud rate\"` to [package.metadata.rtic-scope] in Cargo.toml or specify --tpiu-baud".into()],
             Self::MissingDWTUnit => vec!["Add `dwt_enter_id = \"your enter DWT unit ID\"` and `dwt_exit_id = \"your exit DWT unit ID\"` to [package.metadata.rtic-scope] in Cargo.toml".into()],
             _ => vec![],
         }
@@ -118,7 +113,7 @@ impl TryInto<ManifestProperties> for ManifestPropertiesIntermediate {
             interrupt_path: self
                 .interrupt_path
                 .ok_or(Self::Error::MissingInterruptPath)?,
-            pac_features: self.pac_features.unwrap_or([].to_vec()),
+            pac_features: self.pac_features.unwrap_or_else(|| [].to_vec()),
             tpiu_freq: self.tpiu_freq.ok_or(Self::Error::MissingFreq)?,
             tpiu_baud: self.tpiu_baud.ok_or(Self::Error::MissingBaud)?,
             dwt_enter_id: self.dwt_enter_id.ok_or(Self::Error::MissingDWTUnit)?,
@@ -151,29 +146,24 @@ impl ManifestProperties {
             _ => ManifestPropertiesIntermediate::default(),
         };
 
-        let override_with_opts = |int: &mut ManifestPropertiesIntermediate,
-                                  opts: &ManifestOptions| {
-            if let Some(pac) = &opts.pac_name {
-                int.pac_name = Some(pac.to_owned());
-            }
-            if let Some(pac_version) = &opts.pac_version {
-                int.pac_version = Some(pac_version.to_owned());
-            }
-            if let Some(intp) = &opts.interrupt_path {
-                int.interrupt_path = Some(intp.to_owned());
-            }
-            if let Some(feats) = &opts.pac_features {
-                int.pac_features = Some(feats.to_owned());
-            }
-            if let Some(freq) = &opts.tpiu_freq {
-                int.tpiu_freq = Some(freq.to_owned());
-            }
-            if let Some(baud) = &opts.tpiu_baud {
-                int.tpiu_baud = Some(baud.to_owned());
-            }
-        };
         if let Some(opts) = opts {
-            override_with_opts(&mut int, opts);
+            macro_rules! maybe_override {
+                ($($f:ident),+) => {{
+                    $(
+                        if let Some($f) = &opts.$f {
+                            int.$f = Some($f.to_owned());
+                        }
+                    )+
+                }}
+            }
+            maybe_override!(
+                pac_name,
+                pac_version,
+                pac_features,
+                interrupt_path,
+                tpiu_freq,
+                tpiu_baud
+            );
         }
 
         int.try_into()
