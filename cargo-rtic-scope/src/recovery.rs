@@ -2,9 +2,9 @@ use crate::build::{self, CargoWrapper};
 use crate::diag;
 use crate::manifest::ManifestProperties;
 
-use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Write;
+use std::iter::FromIterator;
 
 use cargo_metadata::Artifact;
 use chrono::Local;
@@ -13,6 +13,7 @@ use itm_decode::{
     cortex_m::VectActive, ExceptionAction, MemoryAccessType, TimestampedTracePackets, TracePacket,
 };
 
+use indexmap::{IndexMap, IndexSet};
 use proc_macro2::{TokenStream, TokenTree};
 use quote::{format_ident, quote};
 use rtic_scope_api::{self as api, EventChunk, EventType, TaskAction};
@@ -171,11 +172,11 @@ impl TraceLookupMaps {
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 struct SoftwareMap {
-    pub task_dispatchers: HashSet<VectActive>,
+    pub task_dispatchers: IndexSet<VectActive>,
     #[serde(with = "vectorize")]
-    pub comparators: HashMap<usize, TaskAction>,
+    pub comparators: IndexMap<usize, TaskAction>,
     #[serde(with = "vectorize")]
-    pub map: HashMap<usize, Vec<String>>,
+    pub map: IndexMap<usize, Vec<String>>,
 }
 impl SoftwareMap {
     pub fn from(
@@ -192,7 +193,7 @@ impl SoftwareMap {
 
         // Extract all dispatcher interrupt idents from #[app(..,
         // dispatchers = [..])] and resolve the associated VectActive.
-        let task_dispatchers: HashSet<VectActive> = resolve_int_nrs(
+        let task_dispatchers: IndexSet<VectActive> = resolve_int_nrs(
             cargo,
             manip,
             app.args
@@ -207,12 +208,12 @@ impl SoftwareMap {
 
         Ok(Self {
             task_dispatchers,
-            comparators: actions.into(),
+            comparators: IndexMap::from_iter(actions.iter().cloned()),
             map,
         })
     }
 
-    fn parse_ast(app: TokenStream) -> HashMap<usize, Vec<String>> {
+    fn parse_ast(app: TokenStream) -> IndexMap<usize, Vec<String>> {
         struct TaskIDGenerator(usize);
         impl TaskIDGenerator {
             pub fn new() -> Self {
@@ -230,13 +231,13 @@ impl SoftwareMap {
 
         let app = syn::parse2::<syn::Item>(app).unwrap();
         let mut ctx: Vec<syn::Ident> = vec![];
-        let mut assocs = HashMap::<usize, Vec<String>>::new();
+        let mut assocs = IndexMap::<usize, Vec<String>>::new();
         let mut id_gen = TaskIDGenerator::new();
 
         fn traverse_item(
             item: &syn::Item,
             ctx: &mut Vec<syn::Ident>,
-            assocs: &mut HashMap<usize, Vec<String>>,
+            assocs: &mut IndexMap<usize, Vec<String>>,
             id_gen: &mut TaskIDGenerator,
         ) {
             match item {
@@ -302,7 +303,7 @@ impl SoftwareMap {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
-struct HardwareMap(#[serde(with = "vectorize")] HashMap<VectActive, Vec<String>>);
+struct HardwareMap(#[serde(with = "vectorize")] IndexMap<VectActive, Vec<String>>);
 impl HardwareMap {
     pub fn from(
         app: &rtic_syntax::ast::App,
@@ -331,21 +332,24 @@ impl HardwareMap {
                 },)+]
             }}
         }
-        let internal_ints: HashMap<String, Exception> = resolve_core_interrupts!(
-            NonMaskableInt,
-            HardFault,
-            MemoryManagement,
-            BusFault,
-            UsageFault,
-            SecureFault,
-            SVCall,
-            DebugMonitor,
-            PendSV,
-            SysTick
-        )
-        .into();
+        let internal_ints: IndexMap<String, Exception> = IndexMap::from_iter(
+            resolve_core_interrupts!(
+                NonMaskableInt,
+                HardFault,
+                MemoryManagement,
+                BusFault,
+                UsageFault,
+                SecureFault,
+                SVCall,
+                DebugMonitor,
+                PendSV,
+                SysTick
+            )
+            .iter()
+            .cloned(),
+        );
 
-        type TaskBindMaps = HashMap<String, String>;
+        type TaskBindMaps = IndexMap<String, String>;
         let (known_maps, unknown_maps): (TaskBindMaps, TaskBindMaps) = app
             .hardware_tasks
             .iter()
@@ -369,7 +373,7 @@ impl HardwareMap {
 
         // Resolve unknown maps by help of a cdylib; extend the known
         // map collection.
-        let resolved_maps: HashMap<VectActive, Vec<String>> = resolve_int_nrs(
+        let resolved_maps: IndexMap<VectActive, Vec<String>> = resolve_int_nrs(
             cargo,
             manip,
             unknown_maps.iter().map(|(k, _v)| k.to_owned()).collect(),
@@ -395,7 +399,7 @@ fn resolve_int_nrs(
     cargo: &CargoWrapper,
     pacp: &ManifestProperties,
     binds: Vec<String>,
-) -> Result<HashMap<String, VectActive>, RecoveryError> {
+) -> Result<IndexMap<String, VectActive>, RecoveryError> {
     const ADHOC_FUNC_PREFIX: &str = "rtic_scope_func_";
 
     // Extract adhoc source to a temporary directory and apply adhoc

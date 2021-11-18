@@ -227,6 +227,7 @@ dependencies = [
  "futures",
  "git2",
  "include_dir",
+ "indexmap",
  "itm-decode",
  "libloading",
  "nix 0.21.2",
@@ -743,6 +744,7 @@ checksum = "bc633605454125dec4b66843673f01c7df2b89479b32e0ed634e43a91cff62a5"
 dependencies = [
  "autocfg",
  "hashbrown",
+ "serde",
 ]
 
 [[package]]

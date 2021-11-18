@@ -1,8 +1,46 @@
-exceptions:
-        SysTick -> ["app", "systick"]
-interrupts:
-        18 -> (["app", "adc"], "ADC")
-software tasks:
-        0 -> ["app", "foo"]
-        1 -> ["app", "bar"]
-        2 -> ["app", "baz"]
+TraceLookupMaps {
+    software: SoftwareMap {
+        task_dispatchers: {
+            Interrupt {
+                irqn: 22,
+            },
+            Interrupt {
+                irqn: 23,
+            },
+        },
+        comparators: {
+            1: Entered,
+            2: Exited,
+        },
+        map: {
+            0: [
+                "app",
+                "foo",
+            ],
+            1: [
+                "app",
+                "bar",
+            ],
+            2: [
+                "app",
+                "baz",
+            ],
+        },
+    },
+    hardware: HardwareMap(
+        {
+            Exception(
+                SysTick,
+            ): [
+                "app",
+                "systick",
+            ],
+            Interrupt {
+                irqn: 34,
+            }: [
+                "app",
+                "adc",
+            ],
+        },
+    ),
+}

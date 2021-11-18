@@ -110,7 +110,6 @@ jobs:
           path: target/${{ matrix.target }}/debug/cargo-rtic-scope
 
   resolve:
-    if: ${{ false }} # disable for now, see <https://github.com/rtic-scope/cargo-rtic-scope/pull/65>
     name: test_output.sh
     runs-on: ubuntu-20.04
     needs:
