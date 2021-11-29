@@ -592,6 +592,7 @@ async fn trace(
         &elf.clone().into_std_path_buf(),
         &opts.flash_options,
         flashloader,
+        true, // do_chip_erase
     )?;
 
     let mut trace_source: Box<dyn sources::Source> = if let Some(dev) = &opts.serial {

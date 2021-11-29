@@ -29,7 +29,7 @@ version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3e61f2b7f93d2c7d2b08263acaa4a363b3e276806c68af6134c44f523bf1aacd"
 dependencies = [
- "gimli",
+ "gimli 0.25.0",
 ]
 
 [[package]]
@@ -632,6 +632,12 @@ name = "gimli"
 version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0a01e0497841a3b2db4f8afa483cce65f7e96a3498bd6c541734792aeac8fe7"
+
+[[package]]
+name = "gimli"
+version = "0.26.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78cc372d058dcf6d5ecd98510e7fbc9e5aec4d21de70f65fea8fecebcd881bd4"
 dependencies = [
  "fallible-iterator",
  "stable_deref_trait",
@@ -812,9 +818,9 @@ dependencies = [
 
 [[package]]
 name = "jep106"
-version = "0.2.5"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "939876d20519325db0883757e29e9858ee02919d0f03e43c74f69296caa314f4"
+checksum = "e80f965a2a659a7a4d9cdb9821a869d6e33c10f3e094e8f7d01648063c425953"
 dependencies = [
  "serde",
 ]
@@ -1141,8 +1147,8 @@ checksum = "ed0cfbc8191465bed66e1718596ee0b0b35d5ee1f41c5df2189d0fe8bde535ba"
 
 [[package]]
 name = "probe-rs"
-version = "0.11.0"
-source = "git+https://github.com/probe-rs/probe-rs.git#d2b13bf47507c85fbccdb170a4c3bcac86985613"
+version = "0.12.0"
+source = "git+https://github.com/probe-rs/probe-rs.git#bf7d826f2b0167b8a97f3623698fb8d018031ce3"
 dependencies = [
  "anyhow",
  "base64",
@@ -1150,7 +1156,7 @@ dependencies = [
  "bitfield",
  "bitvec",
  "enum-primitive-derive",
- "gimli",
+ "gimli 0.26.1",
  "hidapi",
  "ihex",
  "jaylink",
@@ -1172,8 +1178,8 @@ dependencies = [
 
 [[package]]
 name = "probe-rs-cli-util"
-version = "0.11.0"
-source = "git+https://github.com/probe-rs/probe-rs.git#d2b13bf47507c85fbccdb170a4c3bcac86985613"
+version = "0.12.0"
+source = "git+https://github.com/probe-rs/probe-rs.git#bf7d826f2b0167b8a97f3623698fb8d018031ce3"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -1194,8 +1200,8 @@ dependencies = [
 
 [[package]]
 name = "probe-rs-target"
-version = "0.11.0"
-source = "git+https://github.com/probe-rs/probe-rs.git#d2b13bf47507c85fbccdb170a4c3bcac86985613"
+version = "0.12.0"
+source = "git+https://github.com/probe-rs/probe-rs.git#bf7d826f2b0167b8a97f3623698fb8d018031ce3"
 dependencies = [
  "base64",
  "jep106",
@@ -1526,9 +1532,9 @@ dependencies = [
 
 [[package]]
 name = "simplelog"
-version = "0.10.2"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85d04ae642154220ef00ee82c36fb07853c10a4f2a0ca6719f9991211d2eb959"
+checksum = "8baa24de25f3092d9697c76f94cf09f67fca13db2ea11ce80c2f055c1aaf0795"
 dependencies = [
  "chrono",
  "log",
