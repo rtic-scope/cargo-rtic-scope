@@ -3,14 +3,11 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process;
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
 
 use anyhow::{bail, Context};
 use cargo_metadata::Artifact;
-use futures::{executor::block_on, select, stream, FutureExt, StreamExt};
+use crossbeam_channel as channel;
+use futures::executor::block_on;
 use probe_rs_cli_util::{
     common_options::{CargoOptions, FlashOptions},
     flash,
@@ -337,6 +334,8 @@ async fn main_try() -> Result<(), RTICScopeError> {
     // trace packets to all sinks.
     let retstatus = run_loop(source, sinks, metadata, &opts).await;
 
+    println!("\n"); // separate sink errors from tracing status line, and don't erase it
+
     // Wait for frontends to proccess all packets and echo its' stderr
     for (i, (child, stderr)) in children.iter_mut().enumerate() {
         let status = child.wait();
@@ -360,26 +359,20 @@ async fn main_try() -> Result<(), RTICScopeError> {
 }
 
 async fn run_loop(
-    source: Box<dyn sources::Source>,
+    mut source: Box<dyn sources::Source>,
     mut sinks: Vec<Box<dyn sinks::Sink>>,
     metadata: recovery::TraceMetadata,
     opts: &Opts,
 ) -> Result<(), RTICScopeError> {
-    // Setup SIGINT handler
-    let halt = Arc::new(AtomicBool::new(false));
-    let h = halt.clone();
-    ctrlc::set_handler(move || {
-        h.store(true, Ordering::SeqCst);
-        println!("\n"); // separate sink errors from tracing status line, and don't erase it
-    })
-    .context("Failed to install SIGINT handler")?;
+    // Setup SIGINT handler.
+    let (tx, halt) = channel::bounded(0);
+    ctrlc::set_handler(move || tx.send(()).expect("Could not signal SIGINT on channel"))
+        .context("Failed to install SIGINT handler")?;
 
     // Keep tabs on which sinks have broken during drain, if any.
     let mut sinks: Vec<(Box<dyn sinks::Sink>, bool)> =
         sinks.drain(..).map(|s| (s, false)).collect();
     let sinks_at_start = sinks.len();
-
-    let mut _buffer_warning = false;
 
     #[derive(Default)]
     struct Stats {
@@ -488,45 +481,54 @@ async fn run_loop(
         Ok(())
     };
 
-    let mut source = stream::iter(source);
+    let (tx, packet) = channel::unbounded();
+    let packet_poller = std::thread::spawn(move || {
+        let mut buffer_warning = false;
+
+        while let Some(data) = source.next() {
+            if !buffer_warning {
+                if let sources::BufferStatus::AvailWarn(avail, buf_sz) = source.avail_buffer() {
+                    eprintln!(
+                        "Source {} buffer is almost full ({}/{} bytes free) and it not read quickly enough",
+                        source.describe(), avail, buf_sz
+                    );
+                    buffer_warning = true;
+                }
+            }
+
+            match data {
+                packet @ Ok(_) => tx.send(Some(packet)).unwrap(),
+                err @ Err(_) => {
+                    tx.send(Some(err)).unwrap();
+                    break;
+                }
+            }
+        }
+
+        tx.send(None).unwrap(); // EOF
+    });
+
     loop {
-        select! {
-            data = source.next().fuse() => match data {
-                Some(data) => {
-
-                    // XXX futures::Stream must be implemented for sources::Source
-                    // if !buffer_warning {
-                    //     if let sources::BufferStatus::AvailWarn(avail, buf_sz) = source.avail_buffer() {
-                    //         eprintln!(
-                    //             "Source buffer is almost full ({}/{} bytes free) and it not read quickly enough",
-                    //             avail, buf_sz
-                    //         );
-                    //         buffer_warning = true;
-                    //     }
-                    // }
-
-                    let data = data.context("Failed to read trace data from source")?;
-                    handle_packet(data)?;
-
-                    continue;
+        channel::select! {
+            recv(packet) -> packet => match packet.unwrap() {
+                Some(packet) => {
+                    handle_packet(packet.context("Failed to read trace data from source")?)?;
                 },
                 None => break,
             },
-            // XXX consumes a whole CPU spinning here, can we use a
-            // notification channel instead? Would that be more
-            // performant?
-            halt = async { halt.load(Ordering::SeqCst) }.fuse() => {
-                if halt {
-                    break;
-                } else {
-                    continue;
-                }
+            recv(halt) -> _ => {
+                break;
             }
-        };
+        }
     }
 
-    // close frontend sockets
-    drop(sinks);
+    // The thread can simply be joined in all cases except when a halt
+    // is signalled during which the thread is likely to wait for the
+    // next packet from source. All sinks and sources will be dropped at
+    // the end of this function, so we can safely drop the thread too,
+    // as we have no need for it. The program exits soon after, so we
+    // can let the OS reap the thread.
+    drop(packet_poller);
 
     Ok(())
 }

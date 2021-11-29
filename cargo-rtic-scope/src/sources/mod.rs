@@ -38,7 +38,7 @@ pub enum SourceError {
 
 impl diag::DiagnosableError for SourceError {}
 
-pub trait Source: Iterator<Item = Result<TraceData, SourceError>> {
+pub trait Source: Iterator<Item = Result<TraceData, SourceError>> + std::marker::Send {
     fn reset_target(&mut self, _reset_halt: bool) -> Result<(), SourceError> {
         Ok(())
     }
