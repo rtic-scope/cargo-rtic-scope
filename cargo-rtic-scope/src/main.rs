@@ -1,10 +1,9 @@
 use std::env;
 use std::fs;
-use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::process;
 
 use anyhow::{bail, Context};
+use async_std::{prelude::*, process};
 use cargo_metadata::Artifact;
 use crossbeam_channel as channel;
 use futures::executor::block_on;
@@ -300,7 +299,7 @@ async fn main_try() -> Result<(), RTICScopeError> {
             })?;
         {
             let socket_path = {
-                std::io::BufReader::new(
+                async_std::io::BufReader::new(
                     child
                         .stdout
                         .take()
@@ -308,6 +307,7 @@ async fn main_try() -> Result<(), RTICScopeError> {
                 )
                 .lines()
                 .next()
+                .await
                 .context("next() failed")?
             }
             .context("Failed to read socket path from frontend child process")?;
@@ -330,16 +330,29 @@ async fn main_try() -> Result<(), RTICScopeError> {
         );
     }
 
+    // Wrap frontend stderrs in a poll_next wrapper such that
+    // Stream::next polls the stderrs of all spawned frontends.
+    let stderrs = StderrLines {
+        stderrs: children
+            .iter_mut()
+            .map(|(_c, stderr)| async_std::io::BufReader::new(stderr).lines())
+            .collect(),
+        frontends: opts.frontends.clone(),
+    };
+
     // All preparatory I/O and information recovery done. Forward all
     // trace packets to all sinks.
-    let retstatus = run_loop(source, sinks, metadata, &opts).await;
+    let retstatus = run_loop(source, sinks, metadata, &opts, stderrs).await;
 
-    println!("\n"); // separate sink errors from tracing status line, and don't erase it
-
-    // Wait for frontends to proccess all packets and echo its' stderr
+    // Wait for frontends to proccess all packets and flush any
+    // remaining stderr lines.
+    //
+    // TODO use StderrLines from above instead
+    println!("\n"); // dont overwrite the status line
     for (i, (child, stderr)) in children.iter_mut().enumerate() {
-        let status = child.wait();
-        for err in BufReader::new(stderr).lines() {
+        let status = child.status().await;
+        let mut errors = async_std::io::BufReader::new(stderr).lines();
+        while let Some(err) = errors.next().await {
             log::err(format!(
                 "{}: {}",
                 opts.frontends.get(i).unwrap(),
@@ -358,12 +371,49 @@ async fn main_try() -> Result<(), RTICScopeError> {
     retstatus
 }
 
-async fn run_loop(
+struct StderrLines<R>
+where
+    R: async_std::io::BufRead + std::marker::Unpin,
+{
+    pub(crate) stderrs: Vec<async_std::io::Lines<R>>,
+    pub(crate) frontends: Vec<String>,
+}
+
+use async_std::pin::Pin;
+use async_std::task::{self, Poll};
+use futures_lite::stream::StreamExt;
+
+impl<R> async_std::stream::Stream for StderrLines<R>
+where
+    R: async_std::io::BufRead + std::marker::Unpin,
+{
+    type Item = async_std::io::Result<String>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Option<Self::Item>> {
+        for (i, stderr) in self.stderrs.iter_mut().enumerate() {
+            match stderr.poll_next(cx) {
+                Poll::Ready(Some(Ok(line))) => {
+                    return Poll::Ready(Some(Ok(format!("{}: {}", self.frontends[i], line))))
+                }
+                item @ Poll::Ready(_) => return item,
+                Poll::Pending => continue,
+            }
+        }
+
+        task::Poll::Pending
+    }
+}
+
+async fn run_loop<R>(
     mut source: Box<dyn sources::Source>,
     mut sinks: Vec<Box<dyn sinks::Sink>>,
     metadata: recovery::TraceMetadata,
     opts: &Opts,
-) -> Result<(), RTICScopeError> {
+    mut stderrs: StderrLines<R>,
+) -> Result<(), RTICScopeError>
+where
+    R: async_std::io::BufRead + std::marker::Unpin,
+{
     // Setup SIGINT handler.
     let (tx, halt) = channel::bounded(0);
     ctrlc::set_handler(move || tx.send(()).expect("Could not signal SIGINT on channel"))
@@ -512,6 +562,10 @@ async fn run_loop(
         channel::select! {
             recv(packet) -> packet => match packet.unwrap() {
                 Some(packet) => {
+                    if let Poll::Ready(error) = futures::poll!(stderrs.next()) {
+                        log::err(error.unwrap().context("Failed to read frontend stderr")?);
+                    }
+
                     handle_packet(packet.context("Failed to read trace data from source")?)?;
                 },
                 None => break,

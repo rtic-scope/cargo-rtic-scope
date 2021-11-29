@@ -34,6 +34,8 @@ futures = "0.3"
 cortex-m = { version = "0.7", default-features = false, features = ["serde", "std-map"] }
 indexmap = { version = "1.7", features = [ "serde-1" ] }
 crossbeam-channel = "0.5.1"
+async-std = { version = "1", features = [ "unstable" ] }
+futures-lite = "1"
 
 [dependencies.probe-rs]
 version = "0.12"
