@@ -433,11 +433,11 @@ where
         pub malformed: usize,
         pub nonmappable: usize,
     }
-    let mut stats = Stats::default();
 
-    let instant = std::time::Instant::now();
-
-    let mut handle_packet = |data: TraceData| -> Result<(), anyhow::Error> {
+    let handle_packet = |data: TraceData,
+                         stats: &mut Stats,
+                         sinks: &mut Vec<(Box<dyn sinks::Sink>, bool)>|
+     -> Result<(), anyhow::Error> {
         // Try to recover RTIC information for the packets.
         let chunk = metadata.build_event_chunk(data.clone());
 
@@ -487,6 +487,58 @@ where
             bail!("All sinks are broken. Cannot continue.");
         }
 
+        Ok(())
+    };
+
+    let (tx, packet) = channel::unbounded();
+    let packet_poller = std::thread::spawn(move || {
+        let mut buffer_warning = false;
+
+        while let Some(data) = source.next() {
+            if !buffer_warning {
+                if let sources::BufferStatus::AvailWarn(avail, buf_sz) = source.avail_buffer() {
+                    eprintln!(
+                        "Source {} buffer is almost full ({}/{} bytes free) and it not read quickly enough",
+                        source.describe(), avail, buf_sz
+                    );
+                    buffer_warning = true;
+                }
+            }
+
+            match data {
+                packet @ Ok(_) => tx.send(Some(packet)).unwrap(),
+                err @ Err(_) => {
+                    tx.send(Some(err)).unwrap();
+                    break;
+                }
+            }
+        }
+
+        tx.send(None).unwrap(); // EOF
+    });
+
+    let mut stats = Stats::default();
+    let instant = std::time::Instant::now();
+    use std::time::Duration;
+
+    loop {
+        channel::select! {
+            recv(packet) -> packet => match packet.unwrap() {
+                Some(packet) => {
+                    handle_packet(packet.context("Failed to read trace data from source")?, &mut stats, &mut sinks)?;
+                },
+                None => break,
+            },
+            recv(halt) -> _ => {
+                break;
+            },
+            default(Duration::from_millis(100)) => (),
+        }
+
+        if let Poll::Ready(error) = futures::poll!(stderrs.next()) {
+            log::err(error.unwrap().context("Failed to read frontend stderr")?);
+        }
+
         let duration = instant.elapsed();
         log::cont_status(
             match opts.cmd {
@@ -527,53 +579,6 @@ where
                 sinks = format!("{}/{} sinks operational", sinks.len(), sinks_at_start),
             ),
         );
-
-        Ok(())
-    };
-
-    let (tx, packet) = channel::unbounded();
-    let packet_poller = std::thread::spawn(move || {
-        let mut buffer_warning = false;
-
-        while let Some(data) = source.next() {
-            if !buffer_warning {
-                if let sources::BufferStatus::AvailWarn(avail, buf_sz) = source.avail_buffer() {
-                    eprintln!(
-                        "Source {} buffer is almost full ({}/{} bytes free) and it not read quickly enough",
-                        source.describe(), avail, buf_sz
-                    );
-                    buffer_warning = true;
-                }
-            }
-
-            match data {
-                packet @ Ok(_) => tx.send(Some(packet)).unwrap(),
-                err @ Err(_) => {
-                    tx.send(Some(err)).unwrap();
-                    break;
-                }
-            }
-        }
-
-        tx.send(None).unwrap(); // EOF
-    });
-
-    loop {
-        channel::select! {
-            recv(packet) -> packet => match packet.unwrap() {
-                Some(packet) => {
-                    if let Poll::Ready(error) = futures::poll!(stderrs.next()) {
-                        log::err(error.unwrap().context("Failed to read frontend stderr")?);
-                    }
-
-                    handle_packet(packet.context("Failed to read trace data from source")?)?;
-                },
-                None => break,
-            },
-            recv(halt) -> _ => {
-                break;
-            }
-        }
     }
 
     // The thread can simply be joined in all cases except when a halt
