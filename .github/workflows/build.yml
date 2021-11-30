@@ -39,6 +39,21 @@ jobs:
           command: fmt
           args: -- --check
 
+  test:
+    name: test
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install libusb, libudev # for hidapi in probe-rs
+        run: |
+          sudo apt update
+          sudo apt install -y libusb-1.0-0-dev libudev-dev
+      - name: cargo test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --all
+
   clippy:
     name: clippy
     runs-on: ubuntu-20.04

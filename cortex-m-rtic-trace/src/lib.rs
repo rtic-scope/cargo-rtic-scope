@@ -6,7 +6,7 @@
 //! - `tracing`: which offers setup functions that configures related
 //!   peripherals for RTIC task tracing, and a `#[trace]` macro for
 //!   software tasks. Example usage (TODO update):
-//!   ```
+//!   ```ignore
 //!   #[app(device = stm32f4::stm32f401, peripherals = true, dispatchers = [EXTI1])]
 //!   mod app {
 //!       use rtic_trace::{self, tracing::trace};

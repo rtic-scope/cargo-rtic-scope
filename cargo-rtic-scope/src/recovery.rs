@@ -50,8 +50,7 @@ impl diag::DiagnosableError for RecoveryError {
     fn diagnose(&self) -> Vec<String> {
         match self {
             RecoveryError::RTICArgumentsMissing => vec![
-                "RTIC Scope expects an RTIC application declaration on the form `#[app(...)] mod app { ... }` where the first `...` is the application arguments.".to_string(),
-                "Change #[rtic::app(...)] to #[app(...)] via `use rtic::app;`.".to_string(),
+                "RTIC Scope expects an RTIC application declaration on the form `#[rtic::app(...)] mod app { ... }` where the first `...` is the application arguments.".to_string(),
             ],
             RecoveryError::InvalidSoftwareValue(_) => vec![
                 "Invalid DataTraceValue payloads are those of zero length or with non-zero subsequent bytes (only the first byte may be non-zero).".to_string(),
@@ -97,8 +96,12 @@ impl TraceLookupMaps {
         // iterate over the tokenstream until we find #[app(...)] mod app { ... }
         let mut rtic_app = src.into_iter().skip_while(|token| {
             if let TokenTree::Group(g) = token {
-                if let Some(c) = g.stream().into_iter().next() {
-                    return c.to_string().as_str() != "app";
+                let mut stream = g.stream().into_iter();
+                if let (Some(c1), Some(c2)) = (stream.nth(0), stream.nth(2)) {
+                    match (c1.to_string().as_str(), c2.to_string().as_str()) {
+                        ("rtic", "app") => return false,
+                        _ => return true,
+                    }
                 }
             }
             true
@@ -107,7 +110,7 @@ impl TraceLookupMaps {
         let arguments = {
             let mut args: Option<TokenStream> = None;
             if let Some(TokenTree::Group(g)) = rtic_app.next() {
-                if let Some(TokenTree::Group(g)) = g.stream().into_iter().nth(1) {
+                if let Some(TokenTree::Group(g)) = g.stream().into_iter().nth(4) {
                     args = Some(g.stream());
                 }
             }
@@ -628,5 +631,41 @@ impl TraceMetadata {
         );
 
         EventChunk { timestamp, events }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn parse_rtic_app() {
+        let arguments = quote!(device = stm32f4::stm32f401);
+        let ast = quote!(
+            #[rtic::app(#arguments)]
+            mod app {
+                #[shared]
+                struct Shared {}
+
+                #[local]
+                struct Local {}
+
+                #[init]
+                fn init(mut ctx: init::Context) -> (Shared, Local, init::Monotonics) {
+                    (Shared {}, Local {}, init::Monotonics())
+                }
+            }
+        );
+        let src = quote!(
+            #![no_std]
+            #![no_main]
+
+            use panic_halt as _;
+            use rtic;
+
+            #ast
+        );
+
+        TraceLookupMaps::parse_rtic_app(src).unwrap();
     }
 }
