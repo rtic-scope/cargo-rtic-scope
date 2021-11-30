@@ -2,9 +2,9 @@
 #![no_main]
 
 use panic_halt as _; // panic handler
-use rtic::app;
+use rtic;
 
-#[app(device = stm32f4::stm32f401, peripherals = true, dispatchers = [EXTI0])]
+#[rtic::app(device = stm32f4::stm32f401, peripherals = true, dispatchers = [EXTI0])]
 mod app {
     use cortex_m::peripheral::syst::SystClkSource;
     use cortex_m_rtic_trace::{self, trace};

@@ -4,9 +4,9 @@
 #![no_std]
 
 use panic_semihosting as _;
-use rtic::app;
+use rtic;
 
-#[app(device = stm32f4::stm32f401, dispatchers = [EXTI0, EXTI1])]
+#[rtic::app(device = stm32f4::stm32f401, dispatchers = [EXTI0, EXTI1])]
 mod app {
     use cortex_m_rtic_trace::{trace};
 

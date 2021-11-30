@@ -1,3 +1,2 @@
 Error Failed to find arguments to RTIC application
-Hint RTIC Scope expects an RTIC application declaration on the form `#[app(...)] mod app { ... }` where the first `...` is the application arguments.
-Hint Change #[rtic::app(...)] to #[app(...)] via `use rtic::app;`.
+Hint RTIC Scope expects an RTIC application declaration on the form `#[rtic::app(...)] mod app { ... }` where the first `...` is the application arguments.
