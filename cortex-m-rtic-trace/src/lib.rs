@@ -6,7 +6,7 @@
 //! - `tracing`: which offers setup functions that configures related
 //!   peripherals for RTIC task tracing, and a `#[trace]` macro for
 //!   software tasks. Example usage (TODO update):
-//!   ```
+//!   ```ignore
 //!   #[app(device = stm32f4::stm32f401, peripherals = true, dispatchers = [EXTI1])]
 //!   mod app {
 //!       use rtic_trace::{self, tracing::trace};
@@ -86,7 +86,7 @@ pub mod setup {
         tpiu.set_trace_output_protocol(TraceProtocol::AsyncSWONRZ);
         tpiu.enable_continuous_formatting(false); // drops ETM packets
 
-        dwt.enable_exception_tracing(true);
+        dwt.enable_exception_tracing();
         dwt.enable_pc_samples(false);
 
         itm.unlock();

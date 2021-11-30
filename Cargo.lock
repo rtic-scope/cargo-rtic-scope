@@ -534,7 +534,7 @@ dependencies = [
 [[package]]
 name = "cortex-m"
 version = "0.7.3"
-source = "git+https://github.com/rtic-scope/cortex-m.git?branch=feat/host-feats#8470068c820b72e4df3b12dae3d9f7209303cb73"
+source = "git+https://github.com/rust-embedded/cortex-m.git#ae1d2a62d895dc458784c465e021a010cb75a8b1"
 dependencies = [
  "bare-metal",
  "bitfield",
@@ -1876,7 +1876,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da3d56009c8f32e4f208dbea17df72484154d1040a8969b75d8c73eb7b18fe8f"
 dependencies = [
  "bare-metal",
- "cortex-m 0.7.3",
+ "cortex-m 0.6.7",
  "vcell",
 ]
 
