@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use anyhow::{bail, Context};
 use async_std::{prelude::*, process};
 use cargo_metadata::Artifact;
+use chrono::Local;
 use crossbeam_channel as channel;
 use futures::executor::block_on;
 use probe_rs_cli_util::{
@@ -24,6 +25,7 @@ mod sinks;
 mod sources;
 
 use build::{CargoError, CargoWrapper};
+use recovery::TraceMetadata;
 
 pub type TraceData = itm_decode::TimestampedTracePackets;
 
@@ -666,14 +668,19 @@ async fn trace(
     };
 
     // Sample the timestamp of target and flush metadata to file.
-    let metadata = trace_sink
-        .init(artifact.target.name, maps, opts.comment.clone(), || {
-            // Reset the target to execute flashed binary
-            trace_source.reset_target(opts.flash_options.reset_halt)?;
+    let metadata = TraceMetadata::from(
+        artifact.target.name,
+        maps,
+        Local::now(), // XXX this is the reset timestamp
+        manip.tpiu_freq,
+        opts.comment.clone(),
+    );
+    trace_sink.drain_metadata(&metadata)?;
 
-            Ok(manip.tpiu_freq)
-        })
-        .context("Failed to initialize metadata")?;
+    // Reset the target device
+    trace_source
+        .reset_target(opts.flash_options.reset_halt)
+        .context("Failed to reset target")?;
 
     log::status(
         "Recovered",

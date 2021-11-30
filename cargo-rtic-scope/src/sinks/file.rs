@@ -1,4 +1,4 @@
-use crate::recovery::{TraceLookupMaps, TraceMetadata};
+use crate::recovery::TraceMetadata;
 use crate::sinks::{Sink, SinkError};
 use crate::TraceData;
 use std::fs;
@@ -79,32 +79,15 @@ impl FileSink {
         Ok(Self { file })
     }
 
-    /// Initializes the sink with metadata: task resolve maps and target
-    /// reset timestamp.
-    pub fn init<F>(
-        &mut self,
-        program_name: String,
-        maps: TraceLookupMaps,
-        comment: Option<String>,
-        reset_fun: F,
-    ) -> Result<TraceMetadata, SinkError>
-    where
-        F: FnOnce() -> Result<u32, crate::sources::SourceError>,
-    {
-        let ts = Local::now();
-        let freq = reset_fun()?;
-
-        // Create a trace file header with metadata (maps, reset
-        // timestamp, trace clock frequency). Any bytes after this
-        // sequence refers to trace packets.
-        let metadata = TraceMetadata::from(program_name, maps, ts, freq, comment);
+    /// Serialize [TraceMetadata] to replay file.
+    pub fn drain_metadata(&mut self, metadata: &TraceMetadata) -> Result<(), SinkError> {
         {
             let json = serde_json::to_string(&metadata)?;
             self.file.write_all(json.as_bytes())
         }
         .map_err(SinkError::DrainIOError)?;
 
-        Ok(metadata)
+        Ok(())
     }
 }
 
