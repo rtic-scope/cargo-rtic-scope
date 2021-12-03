@@ -44,7 +44,7 @@ serialport = { version = "4", default-features = false } # no libudev functional
 serde = "1"
 serde_json = "1"
 vectorize = "0.2.0"
-rtic-scope-api = { version = "0.1.0-alpha.1", git = "https://github.com/rtic-scope/api.git" }
+rtic-scope-api = { path = "../rtic-scope-api" }
 indexmap = { version = "1.7", features = [ "serde-1" ] }
 
 # Async operations

@@ -3,8 +3,7 @@ name = "rtic-scope-api"
 version = "0.1.0-alpha.1"
 authors = ["Viktor Sonesten <v@tmplt.dev>"]
 edition = "2018"
-repository = "https://github.com/rtic-scope/api"
-homepage = "https://github.com/rtic-scope/api"
+repository = "https://github.com/rtic-scope/cargo-rtic-scope/rtic-scope-api"
 description = "API used between RTIC Scope front- and backends"
 license = "MIT OR Apache-2.0"
 
