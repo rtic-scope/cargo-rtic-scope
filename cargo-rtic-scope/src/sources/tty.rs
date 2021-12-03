@@ -1,12 +1,11 @@
+use crate::manifest::ManifestProperties;
 use crate::sources::{BufferStatus, Source, SourceError};
 use crate::TraceData;
 
 use std::fs;
-use std::io::Read;
 use std::os::unix::io::{AsRawFd, RawFd};
-use std::time::Duration;
 
-use itm_decode::{Decoder, DecoderOptions};
+use itm::{Decoder, DecoderOptions, Timestamps, TimestampsConfiguration};
 use nix::{
     fcntl::{self, FcntlArg, OFlag},
     libc,
@@ -16,7 +15,6 @@ use nix::{
     },
     unistd::{sysconf, SysconfVar},
 };
-use probe_rs::Session;
 
 mod ioctl {
     use super::libc;
@@ -193,19 +191,21 @@ pub fn configure(device: &str) -> Result<fs::File, SourceError> {
 }
 
 pub struct TTYSource {
-    bytes: std::io::Bytes<fs::File>,
     fd: RawFd,
-    decoder: Decoder,
-    session: Session,
+    decoder: Timestamps<fs::File>,
 }
 
 impl TTYSource {
-    pub fn new(device: fs::File, session: Session) -> Self {
+    pub fn new(device: fs::File, opts: &ManifestProperties) -> Self {
         Self {
             fd: device.as_raw_fd(),
-            bytes: device.bytes(),
-            decoder: Decoder::new(DecoderOptions::default()),
-            session,
+            decoder: Decoder::new(device, DecoderOptions { ignore_eof: true }).timestamps(
+                TimestampsConfiguration {
+                    clock_frequency: opts.tpiu_freq,
+                    lts_prescaler: opts.lts_prescaler,
+                    expect_malformed: opts.expect_malformed,
+                },
+            ),
         }
     }
 }
@@ -214,35 +214,14 @@ impl Iterator for TTYSource {
     type Item = Result<TraceData, SourceError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        for b in &mut self.bytes {
-            match b {
-                Ok(b) => self.decoder.push(&[b]),
-                Err(e) => return Some(Err(SourceError::IterIOError(e))),
-            };
-
-            match self.decoder.pull_with_timestamp() {
-                None => continue,
-                Some(packets) => return Some(Ok(packets)),
-            }
+        match self.decoder.next() {
+            None => None,
+            Some(res) => Some(res.map_err(SourceError::DecodeError)),
         }
-
-        None
     }
 }
 
 impl Source for TTYSource {
-    fn reset_target(&mut self, reset_halt: bool) -> Result<(), SourceError> {
-        let mut core = self.session.core(0).map_err(SourceError::ResetError)?;
-        if reset_halt {
-            core.reset_and_halt(Duration::from_millis(250))
-                .map_err(SourceError::ResetError)?;
-        } else {
-            core.reset().map_err(SourceError::ResetError)?;
-        }
-
-        Ok(())
-    }
-
     fn avail_buffer(&self) -> BufferStatus {
         let avail_bytes = unsafe {
             let mut fionread: libc::c_int = 0;

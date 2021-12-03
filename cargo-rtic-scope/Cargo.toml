@@ -19,7 +19,7 @@ crossterm = "0.20"
 anyhow = { version = "1", features = ["backtrace"] }
 git2 = { version = "0.13", default-features = false }
 chrono = { version = "0.4", features = ["serde"] }
-itm-decode = { version = "0.6.1", features = ["serde"] }
+itm = { version = "0.4.0", git = "https://github.com/rtic-scope/itm.git", features = ["serde"], branch = "refactor/consume-decoder" }
 
 # building and parsing
 cargo_metadata = "0.14"
@@ -30,11 +30,11 @@ include_dir = "0.6.3-alpha.0"
 libloading = "0.7"
 rtic-syntax = "=0.5.0-rc.1"
 tempfile = "3"
-cortex-m = { version = "0.7", default-features = false, features = ["serde", "std-map"] }
+cortex-m = { version = "0.7", git = "https://github.com/rtic-scope/cortex-m", branch = "feat/impl-lts-opts", default-features = false, features = ["serde", "std-map"]}
 
 # Probe support
-probe-rs = { version = "0.12", git = "https://github.com/probe-rs/probe-rs.git" }
-probe-rs-cli-util = { version = "0.12", git = "https://github.com/probe-rs/probe-rs.git" }
+probe-rs = { version = "0.12", git = "https://github.com/rtic-scope/probe-rs.git", branch = "feat/swo-read" }
+probe-rs-cli-util = { version = "0.12", git = "https://github.com/rtic-scope/probe-rs.git", branch = "feat/swo-read" }
 
 # TTY support
 nix = "0.21.0"

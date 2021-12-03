@@ -1,24 +1,28 @@
+use crate::manifest::ManifestProperties;
 use crate::sources::{BufferStatus, Source, SourceError};
 use crate::TraceData;
 
 use std::fs;
-use std::io::Read;
 
-use itm_decode::{Decoder, DecoderOptions};
+use itm::{Decoder, DecoderOptions, Timestamps, TimestampsConfiguration};
 
 /// Something data is deserialized from. Always a file.
 pub struct RawFileSource {
     file_name: String,
-    bytes: std::io::Bytes<fs::File>,
-    decoder: Decoder,
+    decoder: Timestamps<std::fs::File>,
 }
 
 impl RawFileSource {
-    pub fn new(fd: fs::File) -> Self {
+    pub fn new(file: fs::File, opts: &ManifestProperties) -> Self {
         Self {
-            file_name: format!("{:?}", fd),
-            bytes: fd.bytes(),
-            decoder: Decoder::new(DecoderOptions::default()),
+            file_name: format!("{:?}", file),
+            decoder: Decoder::new(file, DecoderOptions { ignore_eof: true }).timestamps(
+                TimestampsConfiguration {
+                    clock_frequency: opts.tpiu_freq,
+                    lts_prescaler: opts.lts_prescaler,
+                    expect_malformed: opts.expect_malformed,
+                },
+            ),
         }
     }
 }
@@ -27,19 +31,10 @@ impl Iterator for RawFileSource {
     type Item = Result<TraceData, SourceError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        for b in &mut self.bytes {
-            match b {
-                Ok(b) => self.decoder.push(&[b]),
-                Err(e) => return Some(Err(SourceError::IterIOError(e))),
-            };
-
-            match self.decoder.pull_with_timestamp() {
-                None => continue,
-                Some(packets) => return Some(Ok(packets)),
-            }
+        match self.decoder.next() {
+            None => None,
+            Some(res) => Some(res.map_err(SourceError::DecodeError)),
         }
-
-        None
     }
 }
 

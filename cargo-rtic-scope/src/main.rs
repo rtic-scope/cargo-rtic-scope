@@ -27,7 +27,7 @@ mod sources;
 use build::{CargoError, CargoWrapper};
 use recovery::TraceMetadata;
 
-pub type TraceData = itm_decode::TimestampedTracePackets;
+pub type TraceData = itm::TimestampedTracePackets;
 
 #[derive(Debug, StructOpt)]
 struct Opts {
@@ -214,6 +214,8 @@ fn main() {
     }
 }
 
+static mut SESSION: Option<probe_rs::Session> = None;
+
 async fn main_try() -> Result<(), RTICScopeError> {
     // Handle CLI options
     let mut args: Vec<_> = std::env::args().collect();
@@ -257,7 +259,7 @@ async fn main_try() -> Result<(), RTICScopeError> {
     let (source, mut sinks, metadata) = match opts.cmd {
         Command::Trace(ref opts) => match trace(opts, cart).await? {
             Some(tup) => tup,
-            None => return Ok(()),
+            None => return Ok(()), // NOTE --resolve-only was passed
         },
         Command::Replay(ref opts) => {
             match replay(opts, cart).await.with_context(|| {
@@ -444,7 +446,7 @@ where
         let chunk = metadata.build_event_chunk(data.clone());
 
         // Report any unmappable/unknown events that occured, and record stats
-        stats.packets += data.packets_consumed;
+        stats.packets += data.consumed_packets;
         for event in chunk.events.iter() {
             match event {
                 api::EventType::Unmappable(ref packet, ref reason) => {
@@ -628,11 +630,16 @@ async fn trace(
         return Ok(None);
     }
 
-    let mut session = opts
-        .flash_options
-        .probe_options
-        .simple_attach()
-        .context("Failed to attach to target session")?;
+    let session = unsafe {
+        SESSION = Some(
+            opts.flash_options
+                .probe_options
+                .simple_attach()
+                .context("Failed to attach to target session")?,
+        );
+
+        SESSION.as_mut().unwrap()
+    };
 
     // TODO make this into Sink::generate().remove_old(), etc.?
     let mut trace_sink = sinks::FileSink::generate_trace_file(
@@ -649,19 +656,19 @@ async fn trace(
     let flashloader = opts
         .flash_options
         .probe_options
-        .build_flashloader(&mut session, &elf.clone().into_std_path_buf())?;
+        .build_flashloader(session, &elf.clone().into_std_path_buf())?;
     flash::run_flash_download(
-        &mut session,
+        session,
         &elf.clone().into_std_path_buf(),
         &opts.flash_options,
         flashloader,
         true, // do_chip_erase
     )?;
 
-    let mut trace_source: Box<dyn sources::Source> = if let Some(dev) = &opts.serial {
+    let trace_source: Box<dyn sources::Source> = if let Some(dev) = &opts.serial {
         Box::new(sources::TTYSource::new(
             sources::tty::configure(dev).with_context(|| format!("Failed to configure {}", dev))?,
-            session,
+            &manip,
         ))
     } else {
         Box::new(sources::ProbeSource::new(session, &manip)?)
@@ -678,9 +685,16 @@ async fn trace(
     trace_sink.drain_metadata(&metadata)?;
 
     // Reset the target device
-    trace_source
-        .reset_target(opts.flash_options.reset_halt)
-        .context("Failed to reset target")?;
+    unsafe { SESSION.as_mut().unwrap() }
+        .core(0)
+        .and_then(|mut c| match opts.flash_options.reset_halt {
+            true => {
+                let _ = c.reset_and_halt(std::time::Duration::from_millis(250))?;
+                Ok(())
+            }
+            false => c.reset(),
+        })
+        .map_err(sources::SourceError::ResetError)?;
 
     log::status(
         "Recovered",
@@ -710,9 +724,10 @@ async fn replay(
                 },
             ..
         } => {
-            let src = sources::RawFileSource::new(fs::OpenOptions::new().read(true).open(file)?);
             let (cargo, artifact) = cart.await?;
             let manip = manifest::ManifestProperties::new(&cargo, None)?;
+            let src =
+                sources::RawFileSource::new(fs::OpenOptions::new().read(true).open(file)?, &manip);
             let maps = recovery::TraceLookupMaps::from(&cargo, &artifact, &manip)?;
             let metadata = recovery::TraceMetadata::from(
                 artifact.target.name,

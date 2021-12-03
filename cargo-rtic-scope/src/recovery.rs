@@ -9,14 +9,12 @@ use std::iter::FromIterator;
 use cargo_metadata::Artifact;
 use chrono::Local;
 use include_dir::{dir::ExtractMode, include_dir};
-use itm_decode::{
-    cortex_m::VectActive, ExceptionAction, MemoryAccessType, TimestampedTracePackets, TracePacket,
-};
+use itm::{ExceptionAction, MemoryAccessType, TimestampedTracePackets, TracePacket, VectActive};
 
 use indexmap::{IndexMap, IndexSet};
 use proc_macro2::{TokenStream, TokenTree};
 use quote::{format_ident, quote};
-use rtic_scope_api::{self as api, EventChunk, EventType, TaskAction};
+use rtic_scope_api::{EventChunk, EventType, TaskAction};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -560,28 +558,9 @@ impl TraceMetadata {
             timestamp,
             packets,
             malformed_packets,
-            packets_consumed: _,
+            consumed_packets: _,
         }: TimestampedTracePackets,
     ) -> EventChunk {
-        let timestamp = {
-            let itm_decode::Timestamp {
-                base,
-                delta,
-                data_relation,
-                diverged,
-            } = timestamp;
-            let seconds_since = (base.unwrap_or(0) + delta.expect("Timestamp::delta == None"))
-                as f64
-                / self.tpiu_freq as f64;
-            let since = chrono::Duration::nanoseconds((seconds_since * 1e9).round() as i64);
-
-            api::Timestamp {
-                ts: self.reset_timestamp + since,
-                data_relation,
-                diverged,
-            }
-        };
-
         let mut events = vec![];
         for packet in packets.iter() {
             match packet {
