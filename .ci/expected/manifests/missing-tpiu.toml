@@ -11,6 +11,8 @@ pac_version = "0.13"
 interrupt_path = "stm32f4::stm32f401::Interrupt"
 dwt_enter_id = 1
 dwt_exit_id = 2
+lts_prescaler = 1
+expect_malformed = true
 
 [workspace]
 

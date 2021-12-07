@@ -13,6 +13,8 @@ tpiu_freq = 16000000
 tpiu_baud = 115200
 dwt_enter_id = 1
 dwt_exit_id = 2
+lts_prescaler = 1
+expect_malformed = true
 
 [workspace]
 

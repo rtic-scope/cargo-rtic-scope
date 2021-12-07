@@ -11,6 +11,8 @@ pac_version = "0.13"
 interrupt_path = "stm32f4::stm32f401::Interrupt"
 tpiu_freq = 16000000
 tpiu_baud = 115200
+lts_prescaler = 1
+expect_malformed = true
 
 [workspace]
 
