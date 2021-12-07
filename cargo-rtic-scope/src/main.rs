@@ -344,15 +344,17 @@ async fn main_try() -> Result<(), RTICScopeError> {
         frontends: opts.frontends.clone(),
     };
 
+    // Record the run-time duration of the below run_loop.
+    let instant = std::time::Instant::now();
+
     // All preparatory I/O and information recovery done. Forward all
     // trace packets to all sinks.
-    let retstatus = run_loop(source, sinks, metadata, &opts, stderrs).await;
+    let stats = run_loop(source, sinks, metadata.clone(), &opts, stderrs).await;
 
     // Wait for frontends to proccess all packets and flush any
     // remaining stderr lines.
     //
     // TODO use StderrLines from above instead
-    println!("\n"); // dont overwrite the status line
     for (i, (child, stderr)) in children.iter_mut().enumerate() {
         let status = child.status().await;
         let mut errors = async_std::io::BufReader::new(stderr).lines();
@@ -372,7 +374,57 @@ async fn main_try() -> Result<(), RTICScopeError> {
         }
     }
 
-    retstatus
+    let stats = stats?;
+    let duration = instant.elapsed();
+    log::status(
+        match opts.cmd {
+            Command::Trace(_) => "Traced",
+            Command::Replay(_) => "Replayed",
+        },
+        format!("{}.", format_status_message(&metadata, &stats, &duration)),
+    );
+
+    Ok(())
+}
+
+fn format_status_message(
+    metadata: &recovery::TraceMetadata,
+    stats: &Stats,
+    duration: &std::time::Duration,
+) -> String {
+    fn format_duration(duration: &std::time::Duration) -> String {
+        match duration.as_secs() {
+            duration if duration >= 60 * 60 => {
+                let secs = duration % 60;
+                let mins = (duration / 60) % 60;
+                let hours = duration / 60 / 60;
+
+                format!("{}h {}min {}s", hours, mins, secs)
+            }
+            duration if duration >= 60 => {
+                let secs = duration % 60;
+                let mins = (duration / 60) % 60;
+
+                format!("{}min {}s", mins, secs)
+            }
+            duration => {
+                let secs = duration % 60;
+
+                format!("{}s", secs)
+            }
+        }
+    }
+
+    format!(
+        "{}: {} packets processed in {time} (~{packets_per_sec:.1} packets/s; {} malformed, {} non-mappable); {sinks}",
+        metadata.program_name,
+        stats.packets,
+        stats.malformed,
+        stats.nonmappable,
+        time = format_duration(&duration),
+        packets_per_sec = stats.packets as f32 / duration.as_secs() as f32,
+        sinks = format!("{}/{} sinks operational", stats.sinks.0, stats.sinks.1),
+    )
 }
 
 struct StderrLines<R>
@@ -408,13 +460,27 @@ where
     }
 }
 
+#[derive(Default)]
+struct Stats {
+    /// How many ITM packets we have received from the source.
+    pub packets: usize,
+    /// How many malformed ITM packets we have received from the source.
+    pub malformed: usize,
+    /// How many unmappable ITM packets we have received from the
+    /// source.
+    pub nonmappable: usize,
+    /// How many sinks we started with, and how many that remained
+    /// functional until the end.
+    pub sinks: (usize, usize),
+}
+
 async fn run_loop<R>(
     mut source: Box<dyn sources::Source>,
     mut sinks: Vec<Box<dyn sinks::Sink>>,
     metadata: recovery::TraceMetadata,
     opts: &Opts,
     mut stderrs: StderrLines<R>,
-) -> Result<(), RTICScopeError>
+) -> Result<Stats, RTICScopeError>
 where
     R: async_std::io::BufRead + std::marker::Unpin,
 {
@@ -426,17 +492,11 @@ where
     // Keep tabs on which sinks have broken during drain, if any.
     let mut sinks: Vec<(Box<dyn sinks::Sink>, bool)> =
         sinks.drain(..).map(|s| (s, false)).collect();
-    let sinks_at_start = sinks.len();
 
-    #[derive(Default)]
-    struct Stats {
-        // How many ITM packets we have received from the source...
-        pub packets: usize,
-
-        // ...of which, how many are malformed/nonmappable?
-        pub malformed: usize,
-        pub nonmappable: usize,
-    }
+    let mut stats = Stats {
+        sinks: (sinks.len(), sinks.len()),
+        ..Stats::default()
+    };
 
     let handle_packet = |data: TraceData,
                          stats: &mut Stats,
@@ -487,6 +547,7 @@ where
         //
         // TODO replace weth Vec::drain_filter when stable.
         sinks.retain(|(_, is_broken)| !is_broken);
+        stats.sinks.0 = sinks.len();
         if sinks.is_empty() {
             bail!("All sinks are broken. Cannot continue.");
         }
@@ -521,7 +582,6 @@ where
         tx.send(None).unwrap(); // EOF
     });
 
-    let mut stats = Stats::default();
     let instant = std::time::Instant::now();
     use std::time::Duration;
 
@@ -549,39 +609,7 @@ where
                 Command::Trace(_) => "Tracing",
                 Command::Replay(_) => "Replaying",
             },
-            format!(
-                "{}: {} packets processed in {time} (~{packets_per_sec} packets/s; {} malformed, {} non-mappable); {sinks}...",
-                metadata.program_name,
-                stats.packets,
-                stats.malformed,
-                stats.nonmappable,
-                packets_per_sec = if duration.as_secs() != 0 {
-                    stats.packets / duration.as_secs() as usize
-                } else {
-                    0
-                },
-                time = match duration.as_secs() {
-                    duration if duration >= 60 * 60 => {
-                        let secs = duration % 60;
-                        let mins = (duration / 60) % 60;
-                        let hours = duration / 60 / 60;
-
-                        format!("{}h {}min {}s", hours, mins, secs)
-                    }
-                    duration if duration >= 60 => {
-                        let secs = duration % 60;
-                        let mins = (duration / 60) % 60;
-
-                        format!("{}min {}s", mins, secs)
-                    }
-                    duration => {
-                        let secs = duration % 60;
-
-                        format!("{}s", secs)
-                    }
-                },
-                sinks = format!("{}/{} sinks operational", sinks.len(), sinks_at_start),
-            ),
+            format!("{}...", format_status_message(&metadata, &stats, &duration)),
         );
     }
 
@@ -593,7 +621,7 @@ where
     // can let the OS reap the thread.
     drop(packet_poller);
 
-    Ok(())
+    Ok(stats)
 }
 
 type TraceTuple = (
