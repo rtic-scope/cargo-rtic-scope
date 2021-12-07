@@ -539,8 +539,8 @@ where
             default(Duration::from_millis(100)) => (),
         }
 
-        if let Poll::Ready(error) = futures::poll!(stderrs.next()) {
-            log::err(error.unwrap().context("Failed to read frontend stderr")?);
+        if let Poll::Ready(Some(error)) = futures::poll!(stderrs.next()) {
+            log::err(error.context("Failed to read frontend stderr")?);
         }
 
         let duration = instant.elapsed();
