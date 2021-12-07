@@ -564,17 +564,17 @@ impl TraceMetadata {
         let mut events = vec![];
         for packet in packets.iter() {
             match packet {
-                TracePacket::Sync => (), // noop: only used for byte alignment; contains no data
-                TracePacket::Overflow => {
-                    events.push(EventType::Overflow);
-                }
+                TracePacket::Sync => (), // NOTE(noop) only used for byte alignment; contains no data
+                TracePacket::Overflow => events.push(EventType::Overflow),
                 TracePacket::ExceptionTrace { exception, action } => events.push(EventType::Task {
                     name: match self.maps.resolve_hardware_task(exception) {
                         Ok(Some(name)) => name,
-                        Ok(None) => {
-                            events.push(EventType::Unknown(packet.clone()));
-                            continue;
-                        }
+
+                        // NOTE(noop) task dispatcher entered/exited: we
+                        // have already (or will) forward a message
+                        // about the software task itself.
+                        Ok(None) => continue,
+
                         Err(e) => {
                             events.push(EventType::Unmappable(packet.clone(), e.to_string()));
                             continue;
