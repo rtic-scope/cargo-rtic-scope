@@ -88,7 +88,7 @@ dependencies = [
 [[package]]
 name = "cortex-m"
 version = "0.7.3"
-source = "git+https://github.com/rtic-scope/cortex-m?branch=feat/tracing#880b947c44e78fd07d7c231a3c0c82ed3e54b9ef"
+source = "git+https://github.com/rtic-scope/cortex-m.git?branch=feat/impl-lts-opts#738b2da1de3bf7197e30f39749963734ae51b99b"
 dependencies = [
  "bare-metal 0.2.5",
  "bitfield",
