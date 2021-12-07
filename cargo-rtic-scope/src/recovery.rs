@@ -95,7 +95,7 @@ impl TraceLookupMaps {
         let mut rtic_app = src.into_iter().skip_while(|token| {
             if let TokenTree::Group(g) = token {
                 let mut stream = g.stream().into_iter();
-                if let (Some(c1), Some(c2)) = (stream.nth(0), stream.nth(2)) {
+                if let (Some(c1), Some(c2)) = (stream.next(), stream.nth(2)) {
                     match (c1.to_string().as_str(), c2.to_string().as_str()) {
                         ("rtic", "app") => return false,
                         _ => return true,
