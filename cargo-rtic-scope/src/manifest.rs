@@ -8,7 +8,7 @@ use cortex_m::peripheral::itm::LocalTimestampOptions;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 struct ManifestPropertiesIntermediate {
     pub pac_name: Option<String>,
     pub pac_features: Option<Vec<String>>,
@@ -20,23 +20,6 @@ struct ManifestPropertiesIntermediate {
     pub dwt_enter_id: Option<usize>,
     pub dwt_exit_id: Option<usize>,
     pub expect_malformed: Option<bool>,
-}
-
-impl Default for ManifestPropertiesIntermediate {
-    fn default() -> Self {
-        Self {
-            pac_name: None,
-            pac_features: None,
-            pac_version: None,
-            interrupt_path: None,
-            tpiu_freq: None,
-            tpiu_baud: None,
-            lts_prescaler: None,
-            dwt_enter_id: None,
-            dwt_exit_id: None,
-            expect_malformed: None,
-        }
-    }
 }
 
 impl ManifestPropertiesIntermediate {
