@@ -13,6 +13,8 @@ tpiu_freq = 16000000
 tpiu_baud = 115200
 dwt_enter_id = 1
 dwt_exit_id = 2
+lts_prescaler = 1
+expect_malformed = true
 
 [workspace]
 
@@ -22,7 +24,7 @@ nb = "1"
 cortex-m = "0.7"
 cortex-m-rt = "0.6"
 panic-halt = "0.2"
-cortex-m-rtic = "=0.6.0-rc.2"
+cortex-m-rtic = "=0.6.0-rc.4"
 cortex-m-rtic-trace = { path = "../cortex-m-rtic-trace" }
 cortex-m-semihosting = "0.3.3"
 
@@ -39,4 +41,4 @@ version = "0.9"
 features = ["rt", "stm32f401"]
 
 [patch.crates-io]
-cortex-m = { git = "https://github.com/rtic-scope/cortex-m.git", branch = "feat/tracing" }
+cortex-m = { git = "https://github.com/rtic-scope/cortex-m.git", branch = "feat/impl-lts-opts" }
