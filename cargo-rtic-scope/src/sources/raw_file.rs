@@ -31,10 +31,9 @@ impl Iterator for RawFileSource {
     type Item = Result<TraceData, SourceError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.decoder.next() {
-            None => None,
-            Some(res) => Some(res.map_err(SourceError::DecodeError)),
-        }
+        self.decoder
+            .next()
+            .map(|res| res.map_err(SourceError::DecodeError))
     }
 }
 
