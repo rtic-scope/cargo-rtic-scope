@@ -532,7 +532,7 @@ dependencies = [
 [[package]]
 name = "cortex-m"
 version = "0.7.3"
-source = "git+https://github.com/rtic-scope/cortex-m?branch=feat/impl-lts-opts#738b2da1de3bf7197e30f39749963734ae51b99b"
+source = "git+https://github.com/rtic-scope/cortex-m?branch=feat/impl-lts-opts#3b44533324499d355445b502dfff987da8546f1c"
 dependencies = [
  "bare-metal",
  "bitfield",
@@ -1019,7 +1019,7 @@ dependencies = [
 [[package]]
 name = "itm"
 version = "0.4.0"
-source = "git+https://github.com/rtic-scope/itm.git?branch=refactor/consume-decoder#23436e9176f8d70844c765628bac026211eb4585"
+source = "git+https://github.com/rtic-scope/itm.git?branch=refactor/consume-decoder#30020def55b2b8d37b13cba81726f927b65c3a2b"
 dependencies = [
  "bitmatch",
  "bitvec",
