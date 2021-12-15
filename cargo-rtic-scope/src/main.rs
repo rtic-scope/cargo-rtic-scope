@@ -66,6 +66,11 @@ struct TraceOptions {
     #[structopt(long = "resolve-only")]
     resolve_only: bool,
 
+    /// Do not attempt to flash, configure and/or reset the target:
+    /// start tracing immediately.
+    #[structopt(long = "dont-touch-target", requires("serial"))]
+    dont_touch_target: bool,
+
     #[structopt(flatten)]
     pac: ManifestOptions,
 
@@ -658,17 +663,6 @@ async fn trace(
         return Ok(None);
     }
 
-    let session = unsafe {
-        SESSION = Some(
-            opts.flash_options
-                .probe_options
-                .simple_attach()
-                .context("Failed to attach to target session")?,
-        );
-
-        SESSION.as_mut().unwrap()
-    };
-
     // TODO make this into Sink::generate().remove_old(), etc.?
     let mut trace_sink = sinks::FileSink::generate_trace_file(
         &artifact,
@@ -679,19 +673,32 @@ async fn trace(
     )
     .context("Failed to generate trace sink file")?;
 
-    // Flash binary to target
-    let elf = artifact.executable.as_ref().unwrap();
-    let flashloader = opts
-        .flash_options
-        .probe_options
-        .build_flashloader(session, &elf.clone().into_std_path_buf())?;
-    flash::run_flash_download(
-        session,
-        &elf.clone().into_std_path_buf(),
-        &opts.flash_options,
-        flashloader,
-        true, // do_chip_erase
-    )?;
+    if !opts.dont_touch_target {
+        let session = unsafe {
+            SESSION = Some(
+                opts.flash_options
+                    .probe_options
+                    .simple_attach()
+                    .context("Failed to attach to target session")?,
+            );
+
+            SESSION.as_mut().unwrap()
+        };
+
+        // Flash binary to target
+        let elf = artifact.executable.as_ref().unwrap();
+        let flashloader = opts
+            .flash_options
+            .probe_options
+            .build_flashloader(session, &elf.clone().into_std_path_buf())?;
+        flash::run_flash_download(
+            session,
+            &elf.clone().into_std_path_buf(),
+            &opts.flash_options,
+            flashloader,
+            true, // do_chip_erase
+        )?;
+    }
 
     let trace_source: Box<dyn sources::Source> = if let Some(dev) = &opts.serial {
         Box::new(sources::TTYSource::new(
@@ -699,7 +706,10 @@ async fn trace(
             &manip,
         ))
     } else {
-        Box::new(sources::ProbeSource::new(session, &manip)?)
+        Box::new(sources::ProbeSource::new(
+            unsafe { SESSION.as_mut().unwrap() },
+            &manip,
+        )?)
     };
 
     // Sample the timestamp of target and flush metadata to file.
@@ -712,17 +722,19 @@ async fn trace(
     );
     trace_sink.drain_metadata(&metadata)?;
 
-    // Reset the target device
-    unsafe { SESSION.as_mut().unwrap() }
-        .core(0)
-        .and_then(|mut c| match opts.flash_options.reset_halt {
-            true => {
-                let _ = c.reset_and_halt(std::time::Duration::from_millis(250))?;
-                Ok(())
-            }
-            false => c.reset(),
-        })
-        .map_err(sources::SourceError::ResetError)?;
+    if !opts.dont_touch_target {
+        // Reset the target device
+        unsafe { SESSION.as_mut().unwrap() }
+            .core(0)
+            .and_then(|mut c| match opts.flash_options.reset_halt {
+                true => {
+                    let _ = c.reset_and_halt(std::time::Duration::from_millis(250))?;
+                    Ok(())
+                }
+                false => c.reset(),
+            })
+            .map_err(sources::SourceError::ResetError)?;
+    }
 
     log::status(
         "Recovered",
