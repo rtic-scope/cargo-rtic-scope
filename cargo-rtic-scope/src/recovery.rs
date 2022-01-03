@@ -149,7 +149,7 @@ impl TraceLookupMaps {
         value: &[u8],
     ) -> Result<Option<EventType>, RecoveryError> {
         if let Some(action) = self.software.comparators.get(&(*comp as usize)) {
-            if value.iter().filter(|&b| *b > 0).count() > 1 || value.is_empty() {
+            if value.len() != 1 {
                 return Err(RecoveryError::InvalidSoftwareValue(value.to_owned()));
             }
             let value = value[0] as usize;

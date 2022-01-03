@@ -49,10 +49,10 @@ pub use rtic_trace_macros::trace;
 
 struct WatchVars {
     /// Watch variable to which the just entered software task ID is written to.
-    enter: u32,
+    enter: u8,
 
     /// Watch variable to which the just exited software task ID is written to.
-    exit: u32,
+    exit: u8,
 }
 static mut WATCH_VARIABLES: WatchVars = WatchVars { enter: 0, exit: 0 };
 
@@ -129,14 +129,14 @@ pub mod setup {
 /// `parsing` module. If used directly, task IDs must also be properly
 /// configured for the host application.
 #[inline]
-pub fn __write_enter_id(id: u32) {
+pub fn __write_enter_id(id: u8) {
     unsafe {
         WATCH_VARIABLES.enter = id;
     }
 }
 
 #[inline]
-pub fn __write_exit_id(id: u32) {
+pub fn __write_exit_id(id: u8) {
     unsafe {
         WATCH_VARIABLES.exit = id;
     }
