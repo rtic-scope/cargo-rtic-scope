@@ -67,7 +67,6 @@ pub mod setup {
         itm::{GlobalTimestampOptions, ITMSettings, LocalTimestampOptions, TimestampClkSrc},
         tpiu::TraceProtocol,
     };
-    use stm32f4::stm32f401 as Device;
 
     /// Configures all related core peripherals for RTIC task tracing.
     // TODO add option to enable/disable global/local timestamps?
@@ -98,17 +97,6 @@ pub mod setup {
             bus_id: Some(1),
             timestamp_clk_src: TimestampClkSrc::SystemClock,
         });
-    }
-
-    /// Configures all related device peripherals for RTIC task tracing.
-    pub fn device_peripherals(dbgmcu: &mut Device::DBGMCU) {
-        #[rustfmt::skip]
-        dbgmcu.cr.modify(
-            |_, w| unsafe {
-                w.trace_ioen().set_bit() // master enable for tracing
-                 .trace_mode().bits(0b00) // TRACE pin assignment for async mode (SWO)
-            },
-        );
     }
 
     /// Assigns and consumes a DWT comparator for RTIC software task

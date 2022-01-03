@@ -1,4 +1,3 @@
-#![warn(unsafe_code)]
 #![deny(warnings)]
 #![no_main]
 #![no_std]
@@ -25,6 +24,15 @@ mod app {
             w.dbg_stop().set_bit()
         });
 
+        // flip device-specific master swtich for tracing
+        #[rustfmt::skip]
+        ctx.device.DBGMCU.cr.modify(
+            |_, w| unsafe {
+                w.trace_ioen().set_bit() // master enable for tracing
+                 .trace_mode().bits(0b00) // TRACE pin assignment for async mode (SWO)
+            },
+        );
+
         // setup software tracing
         setup::core_peripherals(
             &mut ctx.core.DCB,
@@ -32,7 +40,6 @@ mod app {
             &mut ctx.core.DWT,
             &mut ctx.core.ITM,
         );
-        setup::device_peripherals(&mut ctx.device.DBGMCU);
         setup::assign_dwt_units(&ctx.core.DWT.c[1], &ctx.core.DWT.c[2]);
 
         sw_task::spawn().unwrap();
