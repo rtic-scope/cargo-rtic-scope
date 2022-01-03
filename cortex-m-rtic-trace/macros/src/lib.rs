@@ -15,6 +15,9 @@ pub fn trace(_attrs: TokenStream, item: TokenStream) -> TokenStream {
             format!("{}", unsafe {
                 let id = TRACE_ID;
                 TRACE_ID += 1;
+                if TRACE_ID > u8::MAX.into() {
+                    panic!("255 software tasks are supported at maximum");
+                }
                 id
             })
             .as_str(),
