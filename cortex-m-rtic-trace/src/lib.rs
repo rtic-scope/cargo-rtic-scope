@@ -1,143 +1,228 @@
 #![no_std]
-//! This crate exposes functionality that eases the procedure of tracing
-//! embedded applications written using RTIC. A single feature-set is
-//! available:
+//! This crate exposes functionality that eases the procedure of
+//! enabling tracing embedded applications written using RTIC. A single
+//! function, [configure] is exposed that configures all relevant
+//! peripherals to trace software and hardware tasks. After [configure]
+//! has been called, all hardware tasks will be traced. To trace
+//! software tasks, each software task must also be decorated with the
+//! [trace] macro. See the below example:
 //!
-//! - `tracing`: which offers setup functions that configures related
-//!   peripherals for RTIC task tracing, and a `#[trace]` macro for
-//!   software tasks. Example usage (TODO update):
 //!   ```ignore
-//!   #[app(device = stm32f4::stm32f401, peripherals = true, dispatchers = [EXTI1])]
+//!   #![no_main]
+//!   #![no_std]
+//!   use rtic;
+//!
+//!   #[rtic::app(device = stm32f4::stm32f401, dispatchers = [EXTI1])]
 //!   mod app {
-//!       use rtic_trace::{self, tracing::trace};
+//!       use cortex_m_rtic_trace::{
+//!           self,
+//!           trace,
+//!           TraceConfiguration,
+//!           LocalTimestampOptions,
+//!           GlobalTimestampOptions,
+//!           TimestampClkSrc,
+//!           TraceProtocol
+//!       };
 //!       use stm32f4::stm32f401::Interrupt;
 //!
+//!       #[shared]
+//!       struct Shared {}
+//!
+//!       #[local]
+//!       struct Local {}
+//!
 //!       #[init]
-//!       fn init(mut ctx: init::Context) -> (init::LateResources, init::Monotonics) {
-//!           rtic_trace::tracing::setup::core_peripherals(
+//!       fn init(mut ctx: init::Context) -> (Shared, Local, init::Monotonics) {
+//!           cortex_m_rtic_trace::configure(
 //!               &mut ctx.core.DCB,
 //!               &mut ctx.core.TPIU,
 //!               &mut ctx.core.DWT,
 //!               &mut ctx.core.ITM,
-//!           );
-//!           rtic_trace::tracing::setup::device_peripherals(&mut ctx.device.DBGMCU);
-//!           rtic_trace::tracing::setup::assign_dwt_unit(&ctx.core.DWT.c[1]);
+//!               1, // task enter DWT comparator ID
+//!               2, // task exit DWT comparator ID
+//!               TraceConfiguration {
+//!                   delta_timestamps: LocalTimestampOptions::Enabled,
+//!                   absolute_timestamps: GlobalTimestampOptions::Disabled,
+//!                   timestamp_clk_src: TimestampClkSrc::AsyncTPIU,
+//!                   tpiu_freq: 16_000_000, // Hz
+//!                   tpiu_baud: 115_200, // B/s
+//!                   protocol: TraceProtocol::AsyncSWONRZ,
+//!               }
+//!           ).unwrap();
 //!
 //!           rtic::pend(Interrupt::EXTI0);
-//!
-//!           (init::LateResources {}, init::Monotonics())
+//!           (Shared {}, Local {}, init::Monotonics())
 //!       }
 //!
+//!       // This hardware task is traced by calling configure above in init.
 //!       #[task(binds = EXTI0, priority = 1)]
-//!       fn spawner(_ctx: spawner::Context) {
+//!       fn hardware_task(_: hardware_task::Context) {
 //!           software_task::spawn().unwrap();
 //!       }
 //!
+//!       // This software task is traced by calling configure above in init and by
+//!       //decorating it with #[trace].
 //!       #[task]
 //!       #[trace]
-//!       fn software_task(_ctx: software_task::Context) {
-//!           #[trace]
-//!           fn sub_software_task() {
-//!           }
+//!       fn software_task(_: software_task::Context) {
 //!       }
 //!   }
 //!   ```
+use cortex_m::peripheral::{
+    self as Core,
+    dwt::{AccessType, ComparatorAddressSettings, ComparatorFunction, EmitOption},
+    itm::ITMSettings,
+};
+pub use cortex_m::peripheral::{
+    itm::{GlobalTimestampOptions, LocalTimestampOptions, TimestampClkSrc},
+    tpiu::TraceProtocol,
+};
 
 /// The tracing macro. Takes no arguments and should be placed on a
 /// function. Refer to crate example usage.
 pub use rtic_trace_macros::trace;
 
-struct WatchVars {
-    /// Watch variable to which the just entered software task ID is written to.
-    enter: u8,
-
-    /// Watch variable to which the just exited software task ID is written to.
-    exit: u8,
+/// Trace configuration to apply via [configure].
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+pub struct TraceConfiguration {
+    /// Whether delta (local) timestamps should be generated, and with what prescaler.
+    pub delta_timestamps: LocalTimestampOptions,
+    /// Whether absolute (global) timestamps should be generated, and how often.
+    pub absolute_timestamps: GlobalTimestampOptions,
+    /// The clock that should source the ITM timestamp.
+    pub timestamp_clk_src: TimestampClkSrc,
+    /// The frequency of the TPIU source clock.
+    pub tpiu_freq: u32,
+    /// The baud rate of the TPIU.
+    pub tpiu_baud: u32,
+    /// The protocol and mode of operation the TPIU should use.
+    pub protocol: TraceProtocol,
 }
-static mut WATCH_VARIABLES: WatchVars = WatchVars { enter: 0, exit: 0 };
 
-/// Auxilliary functions for peripheral configuration. Should be called
-/// in the init-function, and preferably in order of (1)
-/// [setup::core_peripherals]; (2) [setup::device_peripherals]; and last, (3)
-/// [setup::assign_dwt_unit]. Refer to crate example usage.
-pub mod setup {
-    use cortex_m::peripheral as Core;
-    use cortex_m::peripheral::{
-        dwt::{AccessType, ComparatorAddressSettings, ComparatorFunction, EmitOption},
-        itm::{GlobalTimestampOptions, ITMSettings, LocalTimestampOptions, TimestampClkSrc},
-        tpiu::TraceProtocol,
-    };
+/// Possible errors on [configure].
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+pub enum TraceConfigurationError {
+    /// Requested SWO mode of operation is not supported by the target.
+    SWOProtocol,
+    /// The target dooes not support trace sampling and exception tracing.
+    Trace,
+    /// Absolute (global) timestamps are not supported by the target.
+    GTS,
+    /// The TPIU clock frequency or baud rate (or both) are invalid.
+    TPIUConfig,
+    /// The [Core::ITM] configuration failed to apply. See [Core::ITM::configure].
+    ITMConfig(Core::itm::ITMConfigurationError),
+}
 
-    /// Configures all related core peripherals for RTIC task tracing.
-    // TODO add option to enable/disable global/local timestamps?
-    pub fn core_peripherals(
-        dcb: &mut Core::DCB,
-        tpiu: &mut Core::TPIU,
-        dwt: &mut Core::DWT,
-        itm: &mut Core::ITM,
-    ) {
-        // TODO check feature availability; return error if not supported.
-
-        // enable tracing
-        dcb.enable_trace();
-
-        tpiu.set_swo_baud_rate(16_000_000, 115_200);
-        tpiu.set_trace_output_protocol(TraceProtocol::AsyncSWONRZ);
-        tpiu.enable_continuous_formatting(false); // drops ETM packets
-
-        dwt.enable_exception_tracing();
-        dwt.enable_pc_samples(false);
-
-        itm.unlock();
-        itm.configure(ITMSettings {
-            enable: true,      // ITMENA: master enable
-            forward_dwt: true, // TXENA: forward DWT packets
-            local_timestamps: LocalTimestampOptions::Enabled,
-            global_timestamps: GlobalTimestampOptions::Disabled,
-            bus_id: Some(1),
-            timestamp_clk_src: TimestampClkSrc::SystemClock,
-        });
+impl From<Core::itm::ITMConfigurationError> for TraceConfigurationError {
+    fn from(itm: Core::itm::ITMConfigurationError) -> Self {
+        Self::ITMConfig(itm)
     }
+}
 
-    /// Assigns and consumes a DWT comparator for RTIC software task
-    /// tracing. The unit is indirectly utilized by [super::trace]. Any
-    /// changes to the unit after this function yields undefined
-    /// behavior, in regards to RTIC task tracing.
-    pub fn assign_dwt_units(enter_dwt: &Core::dwt::Comparator, exit_dwt: &Core::dwt::Comparator) {
-        let enter_addr: u32 = unsafe { &super::WATCH_VARIABLES.enter as *const _ } as u32;
-        let exit_addr: u32 = unsafe { &super::WATCH_VARIABLES.exit as *const _ } as u32;
+/// Container of a variable in memory that is watched by a DWT
+/// comparator to enable software task tracing. Word-aligned to help
+/// with address comparison.
+///
+/// XXX Is word-alignment necessary? Can't we use a mask instead?
+#[repr(align(4))]
+struct WatchVariable {
+    /// ID of the software task that was entered or exited.
+    pub id: u8,
+}
 
-        for (dwt, addr) in [(enter_dwt, enter_addr), (exit_dwt, exit_addr)] {
-            // TODO do we need to clear the MATCHED, bit[24] after every match?
-            dwt.configure(ComparatorFunction::Address(ComparatorAddressSettings {
-                address: addr,
-                mask: 0,
-                emit: EmitOption::Data,
-                access_type: AccessType::WriteOnly,
-            }))
-            .unwrap(); // NOTE safe: valid (emit, access_type) used
+/// Watch variable to which the just entered software task ID is written to. Aligned to 32-bit.
+static mut WATCH_VARIABLE_ENTER: WatchVariable = WatchVariable { id: 0 };
+/// Watch variable to which the just exited software task ID is written to. Aligned to 32-bit.
+static mut WATCH_VARIABLE_EXIT: WatchVariable = WatchVariable { id: 0 };
+
+/// Configures the ARMv7-M peripherals for RTIC hardware and software
+/// task tracing. Fails if the configuration cannot be applied.
+pub fn configure(
+    dcb: &mut Core::DCB,
+    tpiu: &mut Core::TPIU,
+    dwt: &mut Core::DWT,
+    itm: &mut Core::ITM,
+    enter_dwt_idx: usize,
+    exit_dwt_idx: usize,
+    config: &TraceConfiguration,
+) -> Result<(), TraceConfigurationError> {
+    // Check hardware flags for tracing support, verify input.
+    {
+        use TraceConfigurationError as Error;
+
+        let supports = tpiu.swo_supports();
+        if !{
+            match config.protocol {
+                TraceProtocol::Parallel => supports.parallel_operation,
+                TraceProtocol::AsyncSWOManchester => supports.manchester_encoding,
+                TraceProtocol::AsyncSWONRZ => supports.nrz_encoding,
+            }
+        } {
+            return Err(Error::SWOProtocol);
+        }
+
+        if config.tpiu_freq == 0 || config.tpiu_baud == 0 {
+            return Err(Error::TPIUConfig);
+        }
+
+        if !dwt.has_exception_trace() {
+            return Err(Error::Trace);
         }
     }
+
+    // Configure DCB, TPIU, DWT, ITM for hardware task tracing.
+    dcb.enable_trace();
+    tpiu.set_swo_baud_rate(config.tpiu_freq, config.tpiu_baud);
+    tpiu.set_trace_output_protocol(config.protocol);
+    tpiu.enable_continuous_formatting(false); // drop ETM packets
+    dwt.enable_exception_tracing();
+    itm.unlock();
+    itm.configure(ITMSettings {
+        enable: true,      // ITMENA: master enable
+        forward_dwt: true, // TXENA: forward DWT packets
+        local_timestamps: config.delta_timestamps,
+        global_timestamps: config.absolute_timestamps,
+        bus_id: None, // only a single trace source is currently supported
+        timestamp_clk_src: config.timestamp_clk_src,
+    })?;
+
+    // Configure DWT comparators for software task tracing.
+    let enter_addr: u32 = unsafe { &WATCH_VARIABLE_ENTER.id as *const _ } as u32;
+    let exit_addr: u32 = unsafe { &WATCH_VARIABLE_EXIT.id as *const _ } as u32;
+    for (dwt, addr) in [
+        (&dwt.c[enter_dwt_idx], enter_addr),
+        (&dwt.c[exit_dwt_idx], exit_addr),
+    ] {
+        // TODO do we need to clear the MATCHED, bit[24] after every match?
+        dwt.configure(ComparatorFunction::Address(ComparatorAddressSettings {
+            address: addr,
+            mask: 0,
+            emit: EmitOption::Data,
+            access_type: AccessType::WriteOnly,
+        }))
+        .unwrap(); // NOTE safe: valid (emit, access_type) used
+    }
+
+    Ok(())
 }
 
-// TODO only write as much as needed. e.g. for id < 256, only 8 bits
-// must be written.
-
-/// The function utilized by [trace] to write the unique software task
-/// ID to the watch address. You are discouraged to use this function
-/// directly; [trace] uses a sequence of task IDs compatible with the
-/// `parsing` module. If used directly, task IDs must also be properly
-/// configured for the host application.
+/// Function utilized by [trace] to write the unique ID of the just
+/// entered software task to its associated watch address. Only use this
+/// function via [trace].
 #[inline]
 pub fn __write_enter_id(id: u8) {
     unsafe {
-        WATCH_VARIABLES.enter = id;
+        WATCH_VARIABLE_ENTER.id = id;
     }
 }
 
+/// Function utilized by [trace] to write the unique ID of the software
+/// task about to exit to its associated watch address. Only use this
+/// function via [trace].
 #[inline]
 pub fn __write_exit_id(id: u8) {
     unsafe {
-        WATCH_VARIABLES.exit = id;
+        WATCH_VARIABLE_EXIT.id = id;
     }
 }

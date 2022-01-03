@@ -87,10 +87,10 @@ dependencies = [
 
 [[package]]
 name = "cortex-m"
-version = "0.7.3"
-source = "git+https://github.com/rtic-scope/cortex-m.git?branch=feat/impl-lts-opts#3b44533324499d355445b502dfff987da8546f1c"
+version = "0.7.4"
+source = "git+https://github.com/rtic-scope/cortex-m.git?branch=rtic-scope#987c900added2aad32d906a615ed23c83f46acd0"
 dependencies = [
- "bare-metal 0.2.5",
+ "bare-metal 1.0.0",
  "bitfield",
  "embedded-hal",
  "volatile-register",
@@ -151,7 +151,6 @@ version = "0.1.0-alpha.0"
 dependencies = [
  "cortex-m",
  "rtic-trace-macros",
- "stm32f4",
 ]
 
 [[package]]
@@ -428,7 +427,7 @@ dependencies = [
  "nb 1.0.0",
  "panic-halt",
  "panic-semihosting",
- "stm32f4",
+ "stm32f4 0.14.0",
  "stm32f4xx-hal",
 ]
 
@@ -525,6 +524,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "stm32f4"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "379f030a0586d0aa3574cb6497392142ddf125c8146b7b580b4b6b46db9d7dc9"
+dependencies = [
+ "bare-metal 1.0.0",
+ "cortex-m",
+ "cortex-m-rt",
+ "vcell",
+]
+
+[[package]]
 name = "stm32f4xx-hal"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -539,7 +550,7 @@ dependencies = [
  "nb 1.0.0",
  "rand_core",
  "rtcc",
- "stm32f4",
+ "stm32f4 0.13.0",
  "void",
 ]
 

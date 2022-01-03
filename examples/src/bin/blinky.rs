@@ -6,10 +6,10 @@ use rtic;
 
 #[rtic::app(device = stm32f4::stm32f401, peripherals = true, dispatchers = [EXTI0])]
 mod app {
+    use cortex_m::asm;
     use cortex_m::peripheral::syst::SystClkSource;
     use cortex_m_rtic_trace::{self, trace};
     use stm32f4xx_hal::stm32;
-    use cortex_m::asm;
 
     #[shared]
     struct Shared {}
@@ -34,11 +34,7 @@ mod app {
         syst.enable_counter();
         syst.enable_interrupt();
 
-        (
-            Shared {},
-            Local {},
-            init::Monotonics(),
-        )
+        (Shared {}, Local {}, init::Monotonics())
     }
 
     #[task(binds = SysTick)]
