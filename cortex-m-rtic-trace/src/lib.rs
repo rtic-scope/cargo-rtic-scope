@@ -1,17 +1,14 @@
 #![no_std]
 //! This crate exposes functionality that eases the procedure of
-//! enabling tracing embedded applications written using RTIC. A single
-//! function, [configure] is exposed that configures all relevant
-//! peripherals to trace software and hardware tasks. After [configure]
-//! has been called, all hardware tasks will be traced. To trace
-//! software tasks, each software task must also be decorated with the
-//! [trace] macro. See the below example:
+//! enabling tracing for embedded applications written using
+//! [RTIC](https://rtic.rs). A single function, [`configure`], is
+//! exposed that configures all relevant peripherals to trace software
+//! and hardware tasks. After [`configure`] has been called all hardware
+//! tasks will be traced. To trace software tasks each software task
+//! must also be decorated with the [`#[trace]`](trace) macro. See the
+//! below example:
 //!
 //!   ```ignore
-//!   #![no_main]
-//!   #![no_std]
-//!   use rtic;
-//!
 //!   #[rtic::app(device = stm32f4::stm32f401, dispatchers = [EXTI1])]
 //!   mod app {
 //!       use cortex_m_rtic_trace::{
@@ -40,7 +37,7 @@
 //!               &mut ctx.core.ITM,
 //!               1, // task enter DWT comparator ID
 //!               2, // task exit DWT comparator ID
-//!               TraceConfiguration {
+//!               &TraceConfiguration {
 //!                   delta_timestamps: LocalTimestampOptions::Enabled,
 //!                   absolute_timestamps: GlobalTimestampOptions::Disabled,
 //!                   timestamp_clk_src: TimestampClkSrc::AsyncTPIU,
@@ -74,7 +71,7 @@ use cortex_m::peripheral::{
     itm::ITMSettings,
 };
 pub use cortex_m::peripheral::{
-    itm::{GlobalTimestampOptions, LocalTimestampOptions, TimestampClkSrc},
+    itm::{GlobalTimestampOptions, ITMConfigurationError, LocalTimestampOptions, TimestampClkSrc},
     tpiu::TraceProtocol,
 };
 
@@ -82,7 +79,7 @@ pub use cortex_m::peripheral::{
 /// function. Refer to crate example usage.
 pub use rtic_trace_macros::trace;
 
-/// Trace configuration to apply via [configure].
+/// Trace configuration to apply via [`configure`].
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub struct TraceConfiguration {
     /// Whether delta (local) timestamps should be generated, and with what prescaler.
@@ -99,7 +96,7 @@ pub struct TraceConfiguration {
     pub protocol: TraceProtocol,
 }
 
-/// Possible errors on [configure].
+/// Possible errors on [`configure`].
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub enum TraceConfigurationError {
     /// Requested SWO mode of operation is not supported by the target.
@@ -110,7 +107,7 @@ pub enum TraceConfigurationError {
     GTS,
     /// The TPIU clock frequency or baud rate (or both) are invalid.
     TPIUConfig,
-    /// The [Core::ITM] configuration failed to apply. See [Core::ITM::configure].
+    /// The ITM configuration failed to apply.
     ITMConfig(Core::itm::ITMConfigurationError),
 }
 
@@ -207,9 +204,9 @@ pub fn configure(
     Ok(())
 }
 
-/// Function utilized by [trace] to write the unique ID of the just
-/// entered software task to its associated watch address. Only use this
-/// function via [trace].
+/// Function utilized by [`#[trace]`](trace) to write the unique ID of
+/// the just entered software task to its associated watch address. Only
+/// use this function via [`#[trace]`](trace).
 #[inline]
 pub fn __write_enter_id(id: u8) {
     unsafe {
@@ -217,9 +214,9 @@ pub fn __write_enter_id(id: u8) {
     }
 }
 
-/// Function utilized by [trace] to write the unique ID of the software
-/// task about to exit to its associated watch address. Only use this
-/// function via [trace].
+/// Function utilized by [`#[trace]`](trace) to write the unique ID of
+/// the software task about to exit to its associated watch address.
+/// Only use this function via [`#[trace]`](trace).
 #[inline]
 pub fn __write_exit_id(id: u8) {
     unsafe {
