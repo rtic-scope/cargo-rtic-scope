@@ -10,4 +10,4 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 cortex-m = { version = "0.7.3", git = "https://github.com/rtic-scope/cortex-m.git", branch = "rtic-scope" }
-rtic-trace-macros = { path = "macros", version = "0.1.0-alpha.0" }
+rtic-trace-macros = { path = "macros", version = "0.0.0" }
