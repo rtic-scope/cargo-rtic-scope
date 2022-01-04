@@ -6,7 +6,7 @@ edition = "2018"
 license = "MIT OR Apache-2.0"
 homepage = "https://rtic-scope.github.io"
 repository = "https://github.com/rtic-scope/cargo-rtic-scope"
-description = "RTIC Scope backend"
+description = "Host-side daemon for RTIC Scope: zero-cost ITM tracing of RTIC applications"
 
 [dependencies]
 # Auxilliary
