@@ -1549,8 +1549,6 @@ dependencies = [
 name = "rtic-scope-api"
 version = "0.3.0"
 dependencies = [
- "anyhow",
- "chrono",
  "itm",
  "serde",
 ]
