@@ -42,4 +42,4 @@ version = "0.9"
 features = ["rt", "stm32f401"]
 
 [patch.crates-io]
-cortex-m = { version = "0.7.3", git = "https://github.com/rtic-scope/cortex-m.git", branch = "feat/impl-lts-opts" }
+cortex-m = { version = "0.7.3", git = "https://github.com/rtic-scope/cortex-m.git", branch = "rtic-scope" }

@@ -263,6 +263,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bare-metal"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8fe8f5a8a398345e52358e18ff07cc17a568fbca5c6f73873d3a62056309603"
+
+[[package]]
 name = "base64"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -383,7 +389,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored",
- "cortex-m 0.7.3",
+ "cortex-m 0.7.4",
  "crossbeam-channel",
  "crossterm",
  "ctrlc",
@@ -525,16 +531,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3c18719fdc57db65668bfc977db9a0fa1a41d718c5d9cd4f652c9d4b0e0956a"
 dependencies = [
  "aligned",
- "bare-metal",
+ "bare-metal 0.2.5",
  "volatile-register",
 ]
 
 [[package]]
 name = "cortex-m"
-version = "0.7.3"
-source = "git+https://github.com/rtic-scope/cortex-m?branch=feat/impl-lts-opts#3b44533324499d355445b502dfff987da8546f1c"
+version = "0.7.4"
+source = "git+https://github.com/rtic-scope/cortex-m?branch=rtic-scope#01f5f67592cbfc5849442d1aae09e7244d1d71dc"
 dependencies = [
- "bare-metal",
+ "bare-metal 1.0.0",
  "bitfield",
  "embedded-hal",
  "serde",
@@ -545,7 +551,7 @@ dependencies = [
 name = "cortex-m-rtic-trace"
 version = "0.1.0-alpha.0"
 dependencies = [
- "cortex-m 0.7.3",
+ "cortex-m 0.7.4",
  "rtic-trace-macros",
  "stm32f4",
 ]
@@ -915,9 +921,9 @@ dependencies = [
 
 [[package]]
 name = "hidapi"
-version = "1.3.0"
+version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d6f5e247bc66f3255d755e96d9d43f6b191f4e182072b811d55584ff58c510f"
+checksum = "e6c4cc7279df8353788ac551186920e44959d5948aec404be02b28544a598bce"
 dependencies = [
  "cc",
  "libc",
@@ -1013,11 +1019,11 @@ dependencies = [
 [[package]]
 name = "itm"
 version = "0.4.0"
-source = "git+https://github.com/rtic-scope/itm.git?branch=refactor/consume-decoder#30020def55b2b8d37b13cba81726f927b65c3a2b"
+source = "git+https://github.com/rtic-scope/itm.git?branch=refactor/consume-decoder#72280c98cb8919eaa0f6f57f43e40417ab0800e9"
 dependencies = [
  "bitmatch",
  "bitvec",
- "cortex-m 0.7.3",
+ "cortex-m 0.7.4",
  "serde",
  "thiserror",
 ]
@@ -1846,7 +1852,7 @@ version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da3d56009c8f32e4f208dbea17df72484154d1040a8969b75d8c73eb7b18fe8f"
 dependencies = [
- "bare-metal",
+ "bare-metal 0.2.5",
  "cortex-m 0.6.0",
  "vcell",
 ]

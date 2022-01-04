@@ -30,7 +30,7 @@ include_dir = "0.6.3-alpha.0"
 libloading = "0.7"
 rtic-syntax = "1.0.0"
 tempfile = "3"
-cortex-m = { version = "0.7", git = "https://github.com/rtic-scope/cortex-m", branch = "feat/impl-lts-opts", default-features = false, features = ["serde", "std"]}
+cortex-m = { version = "0.7", git = "https://github.com/rtic-scope/cortex-m", branch = "rtic-scope", default-features = false, features = ["serde", "std"]}
 
 # Probe support
 probe-rs = { version = "0.12", git = "https://github.com/rtic-scope/probe-rs.git", branch = "feat/swo-read" }

@@ -491,11 +491,8 @@ fn resolve_int_nrs(
             // must compensate. See also B1.5.2 in the ARMv7-M
             // Architecture Reference Manual.
             const DEVICE_INTERRUPTS_OFFSET: u16 = 16;
-            use std::convert::TryFrom;
-            let irqn = VectActive::from(
-                u8::try_from(func() + DEVICE_INTERRUPTS_OFFSET).expect("IRQn > u8::MAX"),
-            )
-            .expect("Invalid/reserved IRQn");
+            let irqn =
+                VectActive::from(func() + DEVICE_INTERRUPTS_OFFSET).expect("Invalid/reserved IRQn");
 
             Ok((b.to_string(), irqn))
         })
