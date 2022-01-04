@@ -4,24 +4,25 @@ pub use itm::Timestamp;
 use itm::{ExceptionAction, MalformedPacket, TracePacket};
 use serde::{Deserialize, Serialize};
 
+/// [RTIC](https://rtic.rs) nomenclature alias.
 pub type TaskAction = ExceptionAction;
 
 /// A set of events that occurred at a certain timepoint during target
 /// execution.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EventChunk {
-    /// Collective timestamp for the chunk of [EventChunk::events].
+    /// Collective timestamp for the chunk of [`EventChunk::events`].
     pub timestamp: Timestamp,
 
-    /// Set of events that occured during [EventChunk::timestamp].
+    /// Set of events that occured during [`EventChunk::timestamp`].
     pub events: Vec<EventType>,
 }
 
-/// Derivative of [TracePacket], where RTIC task information has
+/// Derivative of [`TracePacket`], where RTIC task information has
 /// been resolved.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum EventType {
-    /// Equivalent to [TracePacket::Overflow].
+    /// Equivalent to [`TracePacket::Overflow`].
     Overflow,
 
     /// An RTIC task performed an action. Either a software or a
