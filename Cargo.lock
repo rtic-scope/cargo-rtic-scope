@@ -508,7 +508,7 @@ dependencies = [
 
 [[package]]
 name = "cortex-m-rtic-trace"
-version = "0.1.0-alpha.0"
+version = "0.3.0"
 dependencies = [
  "cortex-m",
  "rtic-trace-macros",
@@ -1547,7 +1547,7 @@ dependencies = [
 
 [[package]]
 name = "rtic-scope-api"
-version = "0.1.0-alpha.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "chrono",
