@@ -426,7 +426,7 @@ fn format_status_message(
         stats.packets,
         stats.malformed,
         stats.nonmappable,
-        time = format_duration(&duration),
+        time = format_duration(duration),
         packets_per_sec = stats.packets as f32 / duration.as_secs() as f32,
         sinks = format!("{}/{} sinks operational", stats.sinks.0, stats.sinks.1),
     )
