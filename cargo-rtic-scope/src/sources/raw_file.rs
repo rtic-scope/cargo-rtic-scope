@@ -1,3 +1,4 @@
+//! Source which reads raw ITM packets from a file.
 use crate::manifest::ManifestProperties;
 use crate::sources::{BufferStatus, Source, SourceError};
 use crate::TraceData;

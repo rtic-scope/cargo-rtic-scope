@@ -1,3 +1,4 @@
+//! Source which reads [`TraceData`] from a [`Session`].
 use crate::manifest::ManifestProperties;
 use crate::sources::{Source, SourceError};
 use crate::TraceData;

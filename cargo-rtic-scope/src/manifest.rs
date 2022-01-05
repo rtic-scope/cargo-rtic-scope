@@ -1,3 +1,7 @@
+//! Parses the `[package.metadata.rtic-scope]` and
+//! `[workspace.metadata.rtic-scope]` blocks from the RTIC application
+//! manifest for persistent RTIC Scope options. Some options can be
+//! supplied/overridden via command-line options.
 use crate::build::CargoWrapper;
 use crate::diag;
 use crate::ManifestOptions;

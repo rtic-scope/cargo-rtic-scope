@@ -1,3 +1,5 @@
+//! Module responsible for recovering RTIC application metadata to
+//! associate ITM packets with RTIC tasks.
 use crate::build::{self, CargoWrapper};
 use crate::diag;
 use crate::manifest::ManifestProperties;
@@ -59,8 +61,7 @@ impl diag::DiagnosableError for RecoveryError {
     }
 }
 
-/// Lookup maps for hardware and software tasks (along with software
-/// task dispatchers and relevant DWT units). Keys are ...
+/// Lookup maps for hardware and software tasks.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct TraceLookupMaps {
     software: SoftwareMap,
@@ -311,19 +312,6 @@ impl HardwareMap {
         cargo: &CargoWrapper,
         manip: &ManifestProperties,
     ) -> Result<Self, RecoveryError> {
-        // XXX processor core exceptions (internal interrupts)
-        // XXX device-specific exceptions (external interrupts)
-
-        // Find the bound exceptions from the #[task(bound = ...)]
-        // arguments. Further, partition internal and external
-        // interrupts. List of already known exceptions is extracted
-        // from the ARMv7-M arch. reference manual, table B1-4.
-        //
-        // For external exceptions (those defined in PAC::Interrupt), we
-        // need to resolve the number we receive over ITM back to the
-        // interrupt name. For internal interrupts, the name of the
-        // exception is received over ITM.
-
         use cortex_m::peripheral::scb::Exception;
         macro_rules! resolve_core_interrupts {
             ($($excpt:ident),+) => {{
@@ -333,6 +321,17 @@ impl HardwareMap {
                 },)+]
             }}
         }
+        // Exceptions common to all ARMv7-M targets. Known as /processor
+        // core exceptions/ or /internal interrupts/ These exceptions
+        // will be received over ITM as-is, and no additional
+        // information need to be recovered to use them. These labels
+        // are the same ones one can bind hardware tasks to, e.g.
+        //
+        //    #[task(binds = SysTick)]
+        //    fn task(_: task::Context) {}
+        //
+        // This list is sourced from the ARMv7-M arch. reference manual,
+        // table B1-4.
         let internal_ints: IndexMap<String, Exception> = IndexMap::from_iter(
             resolve_core_interrupts!(
                 NonMaskableInt,
@@ -350,6 +349,12 @@ impl HardwareMap {
             .cloned(),
         );
 
+        // Find all bound exceptions from the #[task(bound = ...)]
+        // arguments in the now-parsed source file. Partition internal
+        // (see above) and external interrupts. Further recovery work is
+        // required for the external interrupts: over ITM we'll receive
+        // the IRQ number which we need to associate to a label (found
+        // in PAC::Interrupt).
         type TaskBindMaps = IndexMap<String, String>;
         let (known_maps, unknown_maps): (TaskBindMaps, TaskBindMaps) = app
             .hardware_tasks
@@ -614,6 +619,7 @@ impl TraceMetadata {
 mod test {
     use super::*;
 
+    /// Ensure an RTIC application can be properly parsed.
     #[test]
     fn parse_rtic_app() {
         let arguments = quote!(device = stm32f4::stm32f401);

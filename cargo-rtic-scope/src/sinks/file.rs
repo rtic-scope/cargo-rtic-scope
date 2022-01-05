@@ -1,3 +1,5 @@
+//! A simple file sink which receives JSON-serialized [`TraceData`].
+//! Used for replay functionality.
 use crate::recovery::TraceMetadata;
 use crate::sinks::{Sink, SinkError};
 use crate::TraceData;

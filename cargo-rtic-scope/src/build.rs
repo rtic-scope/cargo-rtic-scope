@@ -1,4 +1,4 @@
-//! Handle artifact building using cargo.
+//! Artifact building using a wrapper around a cargo sub-process call.
 use crate::diag;
 
 use std::env;
@@ -60,7 +60,7 @@ impl diag::DiagnosableError for CargoError {
     }
 }
 
-/// A functioality wrapper around subproccess calls to cargo in PATH.
+/// A functionality wrapper around subproccess calls to cargo in `PATH`.
 impl CargoWrapper {
     fn cmd() -> Command {
         Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))

@@ -1,3 +1,6 @@
+//! A source from which trace information is read. This [`TraceData`] is
+//! mapped to RTIC tasks and forwarded to configured sinks (files and
+//! frontends).
 use crate::diag;
 use crate::TraceData;
 

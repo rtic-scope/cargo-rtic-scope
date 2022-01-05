@@ -1,3 +1,6 @@
+//! Source which reads raw ITM packets from a serial device after
+//! properly configuring it. Commonly used if `probe-rs` cannot read the
+//! target device.
 use crate::manifest::ManifestProperties;
 use crate::sources::{BufferStatus, Source, SourceError};
 use crate::TraceData;

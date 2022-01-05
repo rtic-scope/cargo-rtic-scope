@@ -219,6 +219,11 @@ fn main() {
     }
 }
 
+// XXX This one is messy: a &mut 'a of the session is required to read
+// trace data from it, but sticking it in a Box at the tail-end of trace
+// requires it to be 'static.
+//
+// TODO remove this global
 static mut SESSION: Option<probe_rs::Session> = None;
 
 async fn main_try() -> Result<(), RTICScopeError> {
@@ -242,8 +247,9 @@ async fn main_try() -> Result<(), RTICScopeError> {
         }
     }
 
-    // Build RTIC application to be traced, and create a wrapper around
-    // cargo, reusing the target directory of the application.
+    // Build the RTIC application to be traced in the future (not
+    // necessary for some commands), and create a wrapper around cargo,
+    // reusing the target directory of the application.
     #[allow(clippy::needless_question_mark)]
     let cart = async {
         log::status("Building", "RTIC target application...".to_string());
@@ -260,7 +266,7 @@ async fn main_try() -> Result<(), RTICScopeError> {
     };
 
     // Configure source and sinks. Recover the information we need to
-    // map IRQ numbers to RTIC tasks.
+    // map ITM packets to RTIC tasks.
     let (source, mut sinks, metadata) = match opts.cmd {
         Command::Trace(ref opts) => match trace(opts, cart).await? {
             Some(tup) => tup,
@@ -716,7 +722,7 @@ async fn trace(
     let metadata = TraceMetadata::from(
         artifact.target.name,
         maps,
-        Local::now(), // XXX this is the reset timestamp
+        Local::now(), // XXX this is the approximate reset timestamp
         manip.tpiu_freq,
         opts.comment.clone(),
     );

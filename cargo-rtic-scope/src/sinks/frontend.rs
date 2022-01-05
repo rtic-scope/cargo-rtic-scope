@@ -1,3 +1,5 @@
+//! Sub-proccess sink which received JSON-serialized
+//! [`api::EventChunk`]s.
 use crate::sinks::{Sink, SinkError};
 use crate::TraceData;
 

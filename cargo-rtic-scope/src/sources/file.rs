@@ -1,3 +1,5 @@
+//! File source from which serialized [`TraceData`] is read for replay
+//! purposes.
 use crate::recovery::TraceMetadata;
 use crate::sources::{BufferStatus, Source, SourceError};
 use crate::TraceData;

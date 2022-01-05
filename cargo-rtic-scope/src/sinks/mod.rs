@@ -1,3 +1,5 @@
+//! A sink to which [`TraceData`] and [`api::EventChunk`]s are for
+//! online and post-mortem analysis.
 use crate::diag;
 use crate::TraceData;
 

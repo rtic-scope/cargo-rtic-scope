@@ -1,3 +1,4 @@
+//! Auxilliary functions for logging information to `stdout`.
 use colored::Colorize;
 use crossterm::{
     cursor,
