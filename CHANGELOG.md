@@ -6,8 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
-### Changed
-### Removed
+- `/docs/`, a submodule that contains the overarching documentation of RTIC Scope, which is rendered at [the organization profile](https://github.com/rtic-scope).
 
 ## [0.3.0] - 2022-01-05
 Initial release tracked by this changelog.
