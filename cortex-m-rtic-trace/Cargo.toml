@@ -2,7 +2,7 @@
 name = "cortex-m-rtic-trace"
 version = "0.3.0"
 authors = ["Viktor Sonesten <v@tmplt.dev>"]
-edition = "2018"
+edition = "2021"
 readme = "README.md"
 repository = "https://github.com/rtic-scope/cortex-m-rtic-trace"
 homepage = "https://github.com/rtic-scope/cortex-m-rtic-trace"
