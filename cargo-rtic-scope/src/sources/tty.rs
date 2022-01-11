@@ -34,13 +34,21 @@ mod ioctl {
 ///
 /// Effectively mirrors the behavior of
 /// ```
-/// $ screen /dev/ttyUSB3 115200
+/// $ screen /dev/ttyUSB3 <baud rate>
 /// ```
 /// assuming that `device` is `/dev/ttyUSB3`.
 ///
 /// TODO ensure POSIX compliance, see termios(3)
 /// TODO We are currently using line disciple 0. Is that correct?
-pub fn configure(device: &str) -> Result<fs::File, SourceError> {
+pub fn configure(device: &str, baud_rate: u32) -> Result<fs::File, SourceError> {
+    // ensure a valid baud rate was requested
+    let baud_rate: BaudRate = baud_rate
+        .try_into()
+        .map_err(|_| SourceError::SetupError(format!("{} is not a valid baud rate", baud_rate)))?;
+    if baud_rate == BaudRate::B0 {
+        return Err(SourceError::SetupError("baud rate cannot be 0".to_string()));
+    }
+
     let file = fs::OpenOptions::new()
         .read(true)
         .open(&device)
@@ -143,7 +151,7 @@ pub fn configure(device: &str) -> Result<fs::File, SourceError> {
             | LocalFlags::PENDIN
             | LocalFlags::NOFLSH);
 
-        termios::cfsetspeed(&mut settings, BaudRate::B115200).map_err(|e| {
+        termios::cfsetspeed(&mut settings, baud_rate).map_err(|e| {
             SourceError::SetupError(format!(
                 "Failed to configure {} baud rate: cfsetspeed = {}",
                 device, e

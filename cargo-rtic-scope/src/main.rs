@@ -708,7 +708,8 @@ async fn trace(
 
     let trace_source: Box<dyn sources::Source> = if let Some(dev) = &opts.serial {
         Box::new(sources::TTYSource::new(
-            sources::tty::configure(dev).with_context(|| format!("Failed to configure {}", dev))?,
+            sources::tty::configure(dev, manip.tpiu_baud)
+                .with_context(|| format!("Failed to configure {}", dev))?,
             &manip,
         ))
     } else {
