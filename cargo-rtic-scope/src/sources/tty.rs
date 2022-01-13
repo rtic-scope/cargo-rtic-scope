@@ -13,8 +13,8 @@ use nix::{
     fcntl::{self, FcntlArg, OFlag},
     libc,
     sys::termios::{
-        self, BaudRate, ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg,
-        SpecialCharacterIndices as CC,
+        self, ArbitraryBaudRate, BaudRate, ControlFlags, InputFlags, LocalFlags, OutputFlags,
+        SetArg, SpecialCharacterIndices as CC,
     },
     unistd::{sysconf, SysconfVar},
 };
@@ -42,7 +42,7 @@ mod ioctl {
 /// TODO We are currently using line disciple 0. Is that correct?
 pub fn configure(device: &str, baud_rate: u32) -> Result<fs::File, SourceError> {
     // ensure a valid baud rate was requested
-    let baud_rate: BaudRate = baud_rate
+    let baud_rate: BaudRate = ArbitraryBaudRate(baud_rate)
         .try_into()
         .map_err(|_| SourceError::SetupError(format!("{} is not a valid baud rate", baud_rate)))?;
     if baud_rate == BaudRate::B0 {
@@ -254,5 +254,18 @@ impl Source for TTYSource {
 
     fn describe(&self) -> String {
         format!("TTY (fd: {})", self.fd)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn u32_to_baud_rate() {
+        assert_eq!(
+            Ok(BaudRate::B9600),
+            BaudRate::try_from(ArbitraryBaudRate(9600))
+        );
     }
 }

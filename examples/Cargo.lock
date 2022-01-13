@@ -147,7 +147,7 @@ dependencies = [
 
 [[package]]
 name = "cortex-m-rtic-trace"
-version = "0.1.0-alpha.0"
+version = "0.3.0"
 dependencies = [
  "cortex-m",
  "rtic-trace-macros",
@@ -445,7 +445,7 @@ dependencies = [
 
 [[package]]
 name = "rtic-trace-macros"
-version = "0.1.0-alpha.0"
+version = "0.0.0"
 dependencies = [
  "quote",
  "syn",
