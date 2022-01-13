@@ -746,7 +746,12 @@ async fn trace(
     log::status(
         "Recovered",
         format!(
-            "{ntotal} task(s) from {prog}: {nhard} hard, {nsoft} soft. Target reset and flashed.",
+            "{ntotal} task(s) from {prog}: {nhard} hard, {nsoft} soft.{}",
+            if !opts.dont_touch_target {
+                "Target reset and flashed."
+            } else {
+                ""
+            },
             ntotal = metadata.hardware_tasks_len() + metadata.software_tasks_len(),
             prog = metadata.program_name,
             nhard = metadata.hardware_tasks_len(),
