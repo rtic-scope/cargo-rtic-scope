@@ -538,7 +538,7 @@ where
                     stats.malformed += 1;
                     log::warn(format!("malformed packet: {}: {:?}", malformed, malformed));
                 },
-                api::EventType::Overflow => log::warn("Overflow detected! Packets may have been dropped and timestamps will be diverged until the next global timestamp".to_string()),
+                api::EventType::Overflow => log::warn("Overflow detected! Packets may have been dropped and/or timestamps will potentially be diverged until the next global timestamp.".to_string()),
                 _ => (),
             }
         }
