@@ -144,6 +144,11 @@ impl TraceLookupMaps {
         ))
     }
 
+    pub fn is_used_comparator(&self, cmp_id: u8) -> bool {
+        let cmp_id: usize = cmp_id.into();
+        self.software.comparators.get(&cmp_id).is_some()
+    }
+
     pub fn resolve_software_task(
         &self,
         comp: &u8,
@@ -597,6 +602,17 @@ impl TraceMetadata {
                         ExceptionAction::Returned => TaskAction::Returned,
                     },
                 }),
+
+                TracePacket::DataTraceValue {
+                    comparator,
+                    access_type,
+                    value: _,
+                } if *access_type == MemoryAccessType::Read
+                    && self.maps.is_used_comparator(*comparator) =>
+                {
+                    events.push(EventType::Unmappable(packet.clone(), "a DWT watch address used for software task tracing was read, but should be WO. This should never happen.".to_string()));
+                }
+
                 TracePacket::DataTraceValue {
                     comparator,
                     access_type,

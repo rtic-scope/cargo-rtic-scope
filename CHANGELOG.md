@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   It will now detail that non-timestamp packets have been dropped and/or that the local timestamp counter wrapped which means that timestamps from then on are *potentially* diverged.
 - Ignore enters and exits relating to the `ThreadMode` interrupt: RTIC always executes tasks in handler mode and then returns to `ThreadMode` on `cortex_m::asm::wfi()`.
 - Bumped `itm` to v0.7.0.
+- Emit a warning if a DWT watch address used for software task tracing is read. Such an address should only ever be written to. This error would indicate that something has gone very wrong.
 
 ### Deprecated
 
