@@ -568,6 +568,15 @@ impl TraceMetadata {
             match packet {
                 TracePacket::Sync => (), // NOTE(noop) only used for byte alignment; contains no data
                 TracePacket::Overflow => events.push(EventType::Overflow),
+
+                // NOTE(noop) RTIC tasks always execute in handler mode;
+                // thread mode is always exited before a task is run and
+                // returned to on WFI.
+                TracePacket::ExceptionTrace {
+                    exception,
+                    action: _,
+                } if exception == &VectActive::ThreadMode => (),
+
                 TracePacket::ExceptionTrace { exception, action } => events.push(EventType::Task {
                     name: match self.maps.resolve_hardware_task(exception) {
                         Ok(Some(name)) => name,

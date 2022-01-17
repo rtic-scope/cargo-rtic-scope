@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Valid baud rates are listed in [`nix::sys::termios::BaudRate`](https://docs.rs/nix/0.23.1/nix/sys/termios/enum.BaudRate.html), with the exception of `B0`.
 - Improved the warning message when an overflow packet is decoded.
   It will now detail that non-timestamp packets have been dropped and/or that the local timestamp counter wrapped which means that timestamps from then on are *potentially* diverged.
+- Ignore enters and exits relating to the `ThreadMode` interrupt: RTIC always executes tasks in handler mode and then returns to `ThreadMode` on `cortex_m::asm::wfi()`.
 
 ### Deprecated
 
