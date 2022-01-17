@@ -141,5 +141,5 @@ jobs:
       - run: chmod +x artifacts/cargo-rtic-scope
       - run: rustup target add thumbv7em-none-eabihf
       - run: sudo apt update && sudo apt install -y binutils-arm-none-eabi
-      - run: cargo install rtic-scope-frontend-dummy --version 0.1.0-alpha.1
+      - run: cargo install rtic-scope-frontend-dummy --path ./rtic-scope-frontend-dummy
       - run: .ci/test_outputs.sh artifacts/cargo-rtic-scope
