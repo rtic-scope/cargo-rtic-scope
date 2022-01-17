@@ -1,3 +1,6 @@
+#![allow(rustdoc::bare_urls)]
+#![doc = include_str!("../../docs/profile/README.md")]
+
 use std::env;
 use std::fs;
 use std::path::PathBuf;
