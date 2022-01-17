@@ -938,11 +938,12 @@ dependencies = [
 [[package]]
 name = "itm"
 version = "0.7.0"
-source = "git+https://github.com/rtic-scope/itm.git#775309eccb13261c1c654d99bc6a92846353e5ea"
+source = "git+https://github.com/rtic-scope/itm.git#fa8d153e8461b4cde6dcc352f2107775c349ed4a"
 dependencies = [
  "bitmatch",
  "bitvec",
  "cortex-m",
+ "nix 0.23.1 (git+https://github.com/rtic-scope/nix.git?branch=feat/termios-linux-arbitrary)",
  "serde",
  "thiserror",
 ]
