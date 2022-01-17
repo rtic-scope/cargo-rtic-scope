@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `/docs/`, a submodule that contains the overarching documentation of RTIC Scope, which is rendered at [the organization profile](https://github.com/rtic-scope).
 - `/rtic-scope-frontend-dummy/`, a submodule of the frontend reference implementation.
+- Crate documentation for `cargo-rtic-scope`, which is the same `README.md` used for the organization documentation.
 
 ### Changed
 - On `--serial /path/to/dev`, `dev` will no longer unconditionally configure for 115200 B/s; the baud rate specified with `tpiu_baud` in the `[package.metadata.rtic-scope]` block in `Cargo.toml` will instead be applied.
