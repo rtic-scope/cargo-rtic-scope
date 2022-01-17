@@ -1,0 +1,17 @@
+[package]
+name = "rtic-scope-frontend-dummy"
+version = "0.3.0"
+authors = ["Viktor Sonesten <v@tmplt.dev>"]
+edition = "2018"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/rtic-scope/frontend-dummy"
+repository = "https://github.com/rtic-scope/frontend-dummy"
+description = "Dummy frontend for RTIC Scope"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rtic-scope-api = { version = "0.3", path = "../rtic-scope-api" }
+anyhow = "1"
+tempfile = "3"
+serde_json = "1"

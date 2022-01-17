@@ -1496,6 +1496,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rtic-scope-frontend-dummy"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "rtic-scope-api",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "rtic-syntax"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
