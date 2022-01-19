@@ -9,5 +9,5 @@ homepage = "https://github.com/rtic-scope/cortex-m-rtic-trace"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-cortex-m = { version = "0.7.3", git = "https://github.com/rtic-scope/cortex-m.git", branch = "rtic-scope" }
+cortex-m = "0.7.3"
 rtic-trace-macros = { path = "macros", version = "0.0.0" }

@@ -8,3 +8,4 @@ members = [
 
 [patch.crates-io]
 include_dir = { version = "0.6.3-alpha.0", git = "https://github.com/tmplt/include_dir.git", branch = "feat/extract-overwrite" }
+cortex-m = { version = "0.7", git = "https://github.com/rtic-scope/cortex-m", branch = "rtic-scope" }
