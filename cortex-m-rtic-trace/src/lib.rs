@@ -6,7 +6,7 @@
 use cortex_m::peripheral::{
     self as Core,
     dwt::{AccessType, ComparatorAddressSettings, ComparatorFunction, EmitOption},
-    itm::ITMSettings,
+    itm::ITMConfiguration,
 };
 pub use cortex_m::peripheral::{
     itm::{GlobalTimestampOptions, ITMConfigurationError, LocalTimestampOptions, TimestampClkSrc},
@@ -106,21 +106,24 @@ pub fn configure(
         }
     }
 
-    // Configure DCB, TPIU, DWT, ITM for hardware task tracing.
+    // Globally enable DWT and ITM features
     dcb.enable_trace();
+
     tpiu.set_swo_baud_rate(config.tpiu_freq, config.tpiu_baud);
     tpiu.set_trace_output_protocol(config.protocol);
     tpiu.enable_continuous_formatting(false); // drop ETM packets
-    dwt.enable_exception_tracing();
-    itm.unlock();
-    itm.configure(ITMSettings {
+
+    itm.configure(ITMConfiguration {
         enable: true,      // ITMENA: master enable
         forward_dwt: true, // TXENA: forward DWT packets
         local_timestamps: config.delta_timestamps,
         global_timestamps: config.absolute_timestamps,
-        bus_id: None, // only a single trace source is currently supported
+        bus_id: Some(1), // only a single trace source is currently supported
         timestamp_clk_src: config.timestamp_clk_src,
     })?;
+
+    // Enable hardware task tracing
+    dwt.enable_exception_tracing();
 
     // Configure DWT comparators for software task tracing.
     let enter_addr: u32 = unsafe { &WATCH_VARIABLE_ENTER.id as *const _ } as u32;

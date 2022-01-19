@@ -497,7 +497,7 @@ dependencies = [
 [[package]]
 name = "cortex-m"
 version = "0.7.4"
-source = "git+https://github.com/rtic-scope/cortex-m?branch=rtic-scope#987c900added2aad32d906a615ed23c83f46acd0"
+source = "git+https://github.com/rtic-scope/cortex-m?branch=rtic-scope#83e0b768f90b62d03abcae4b347003772225edfa"
 dependencies = [
  "bare-metal",
  "bitfield",
