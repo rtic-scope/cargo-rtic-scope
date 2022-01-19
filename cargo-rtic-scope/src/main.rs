@@ -653,7 +653,7 @@ async fn trace(
     log::status(
         "Recovering",
         format!("metadata for {}{}", prog, {
-            if opts.resolve_only {
+            if opts.resolve_only || opts.dont_touch_target {
                 "..."
             } else {
                 " and preparing target..."

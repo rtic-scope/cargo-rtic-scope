@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 ### Fixed
-- No longer prints "Target reset and flashed." on `trace --dont-touch-target`.
+- No longer prints "Target reset and flashed." or "preparing target" on `trace --dont-touch-target`.
 
 ### Security
 
