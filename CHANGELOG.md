@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Emit a warning if a DWT watch address used for software task tracing is read. Such an address should only ever be written to. This error would indicate that something has gone very wrong.
 - Crate documentation for `rtic-scope-frontend-dummy`, `cortex-m-rtic-trace`, and `rtic-scope-api` which is now the same as `README.md` used for the organization documentation but with a small header summarizing the crate.
 - Bumped `cortex-m`, ensuring additional target support verification during `cortex_m_rtic_trace::configure`.
+- Messages from frontends are now prefixed by a cyan "Frontend" instead of a red "Error".
 
 ### Deprecated
 

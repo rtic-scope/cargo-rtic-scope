@@ -40,6 +40,10 @@ pub fn err(msg: String) {
     indent_with("Error".red().bold(), msg);
 }
 
+pub fn frontend(msg: String) {
+    indent_with("Frontend".cyan().bold(), msg);
+}
+
 pub fn hint(msg: String) {
     indent_with("Hint".blue().bold(), msg);
 }
