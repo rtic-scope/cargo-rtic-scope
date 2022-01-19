@@ -1,3 +1,7 @@
+#![allow(rustdoc::bare_urls)]
+//! Reference frontend implementation for RTIC Scope.
+#![doc = include_str!("../../docs/profile/README.md")]
+
 use anyhow::{Context, Result};
 use rtic_scope_api as api;
 use serde_json::Deserializer;

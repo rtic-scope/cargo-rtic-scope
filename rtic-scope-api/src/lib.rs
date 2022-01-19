@@ -1,4 +1,6 @@
+#![allow(rustdoc::bare_urls)]
 //! API used between RTIC Scope front- and backends.
+#![doc = include_str!("../../docs/profile/README.md")]
 
 pub use itm::Timestamp;
 use itm::{ExceptionAction, MalformedPacket, TracePacket};

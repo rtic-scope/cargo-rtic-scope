@@ -1,70 +1,8 @@
+#![allow(rustdoc::bare_urls)]
+//! Auxilliary target-side crate for RTIC Scope configuration.
+#![doc = include_str!("../../docs/profile/README.md")]
 #![no_std]
-//! This crate exposes functionality that eases the procedure of
-//! enabling tracing for embedded applications written using
-//! [RTIC](https://rtic.rs). A single function, [`configure`], is
-//! exposed that configures all relevant peripherals to trace software
-//! and hardware tasks. After [`configure`] has been called all hardware
-//! tasks will be traced. To trace software tasks each software task
-//! must also be decorated with the [`#[trace]`](trace) macro. See the
-//! below example:
-//!
-//!   ```ignore
-//!   #[rtic::app(device = stm32f4::stm32f401, dispatchers = [EXTI1])]
-//!   mod app {
-//!       use cortex_m_rtic_trace::{
-//!           self,
-//!           trace,
-//!           TraceConfiguration,
-//!           LocalTimestampOptions,
-//!           GlobalTimestampOptions,
-//!           TimestampClkSrc,
-//!           TraceProtocol
-//!       };
-//!       use stm32f4::stm32f401::Interrupt;
-//!
-//!       #[shared]
-//!       struct Shared {}
-//!
-//!       #[local]
-//!       struct Local {}
-//!
-//!       #[init]
-//!       fn init(mut ctx: init::Context) -> (Shared, Local, init::Monotonics) {
-//!           cortex_m_rtic_trace::configure(
-//!               &mut ctx.core.DCB,
-//!               &mut ctx.core.TPIU,
-//!               &mut ctx.core.DWT,
-//!               &mut ctx.core.ITM,
-//!               1, // task enter DWT comparator ID
-//!               2, // task exit DWT comparator ID
-//!               &TraceConfiguration {
-//!                   delta_timestamps: LocalTimestampOptions::Enabled,
-//!                   absolute_timestamps: GlobalTimestampOptions::Disabled,
-//!                   timestamp_clk_src: TimestampClkSrc::AsyncTPIU,
-//!                   tpiu_freq: 16_000_000, // Hz
-//!                   tpiu_baud: 115_200, // B/s
-//!                   protocol: TraceProtocol::AsyncSWONRZ,
-//!               }
-//!           ).unwrap();
-//!
-//!           rtic::pend(Interrupt::EXTI0);
-//!           (Shared {}, Local {}, init::Monotonics())
-//!       }
-//!
-//!       // This hardware task is traced by calling configure above in init.
-//!       #[task(binds = EXTI0, priority = 1)]
-//!       fn hardware_task(_: hardware_task::Context) {
-//!           software_task::spawn().unwrap();
-//!       }
-//!
-//!       // This software task is traced by calling configure above in init and by
-//!       //decorating it with #[trace].
-//!       #[task]
-//!       #[trace]
-//!       fn software_task(_: software_task::Context) {
-//!       }
-//!   }
-//!   ```
+
 use cortex_m::peripheral::{
     self as Core,
     dwt::{AccessType, ComparatorAddressSettings, ComparatorFunction, EmitOption},
