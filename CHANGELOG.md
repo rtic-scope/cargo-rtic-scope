@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+### Changed
+### Deprecated
+### Security
+
+## [0.3.1] 2022-01-19
+Mostly a maintenance release with some quality-of-life changes.
+The largest change is that on `trace --serial`, the given device is not unconditionally configured for 115200bps.
+
+### Added
 - `/docs/`, a submodule that contains the overarching documentation of RTIC Scope, which is rendered at [the organization profile](https://github.com/rtic-scope).
 - `/rtic-scope-frontend-dummy/`, a submodule of the frontend reference implementation.
 - Crate documentation for `cargo-rtic-scope`, which is the same `README.md` used for the organization documentation.
@@ -35,5 +44,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.3.0] - 2022-01-05
 Initial release tracked by this changelog.
 
-[Unreleased]: https://github.com/rtic-scope/cargo-rtic-scope/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/rtic-scope/cargo-rtic-scope/compare/v0.3.1...HEAD
+[v0.3.1]: https://github.com/rtic-scope/cargo-rtic-scope/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/rtic-scope/cargo-rtic-scope/releases/tag/v0.3.0
