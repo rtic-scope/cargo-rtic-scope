@@ -373,7 +373,7 @@ async fn main_try() -> Result<(), RTICScopeError> {
         let status = child.status().await;
         let mut errors = async_std::io::BufReader::new(stderr).lines();
         while let Some(err) = errors.next().await {
-            log::err(format!(
+            log::frontend(format!(
                 "{}: {}",
                 opts.frontends.get(i).unwrap(),
                 err.context("Failed to read frontend stderr")?
