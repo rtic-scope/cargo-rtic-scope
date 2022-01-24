@@ -33,14 +33,8 @@ The largest change is that on `trace --serial`, the given device is not uncondit
 - Bumped `cortex-m`, ensuring additional target support verification during `cortex_m_rtic_trace::configure`.
 - Messages from frontends are now prefixed by a cyan "Frontend" instead of a red "Error".
 
-### Deprecated
-
-### Removed
-
 ### Fixed
 - No longer prints "Target reset and flashed." or "preparing target" on `trace --dont-touch-target`.
-
-### Security
 
 ## [0.3.0] - 2022-01-05
 Initial release tracked by this changelog.
