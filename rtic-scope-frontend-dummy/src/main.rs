@@ -21,10 +21,16 @@ fn main() -> Result<()> {
     let stream = Deserializer::from_reader(socket).into_iter::<api::EventChunk>();
     let mut prev_nanos = 0;
     for chunk in stream {
-        let chunk = chunk.context("Failed to deserialize chunk")?;
-        let nanos = chunk.timestamp.offset.as_nanos();
+        let api::EventChunk { timestamp, events } = chunk.context("Failed to deserialize chunk")?;
+        let (quality, nanos) = match timestamp {
+            api::Timestamp::Sync(offset) | api::Timestamp::AssocEventDelay(offset) => {
+                ("good", offset.as_nanos())
+            }
+            api::Timestamp::UnknownDelay { prev: _, curr }
+            | api::Timestamp::UnknownAssocEventDelay { prev: _, curr } => ("bad!", curr.as_nanos()),
+        };
         let diff = nanos - prev_nanos;
-        eprintln!("@{} µs (+{} ns): {:?}", nanos, diff, chunk.events);
+        eprintln!("@{nanos} µs (+{diff} ns) [{quality}]: {events:?}");
         prev_nanos = nanos;
     }
 

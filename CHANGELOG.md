@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 ### Changed
+- Bump `itm` which improves the denotation of quality in the downstream `api::Timestamp`: a previous `api::Timestamp { offset: 1, data_relation: TimestampDataRelation::Sync }` is now represented as `api::Timestamp::Sync(1)`.
 ### Deprecated
 ### Security
 
