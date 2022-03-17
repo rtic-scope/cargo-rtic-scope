@@ -937,8 +937,8 @@ dependencies = [
 
 [[package]]
 name = "itm"
-version = "0.7.0"
-source = "git+https://github.com/rtic-scope/itm.git#d91f4ed6dfafd1fc461be1956ab5d667a9f9e5ea"
+version = "0.8.0"
+source = "git+https://github.com/rtic-scope/itm?branch=v0.8.x#21d83b430320e7f1640724566910e214720cece9"
 dependencies = [
  "bitmatch",
  "bitvec",
