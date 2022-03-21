@@ -351,7 +351,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-rtic-scope"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "async-std",
@@ -508,7 +508,7 @@ dependencies = [
 
 [[package]]
 name = "cortex-m-rtic-trace"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "cortex-m",
  "rtic-trace-macros",
@@ -960,8 +960,8 @@ dependencies = [
 
 [[package]]
 name = "itm"
-version = "0.7.0"
-source = "git+https://github.com/rtic-scope/itm.git#d91f4ed6dfafd1fc461be1956ab5d667a9f9e5ea"
+version = "0.8.0"
+source = "git+https://github.com/rtic-scope/itm?branch=v0.8.x#21d83b430320e7f1640724566910e214720cece9"
 dependencies = [
  "bitmatch",
  "bitvec",
@@ -1579,7 +1579,7 @@ dependencies = [
 
 [[package]]
 name = "rtic-scope-api"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "itm",
  "serde",
@@ -1587,7 +1587,7 @@ dependencies = [
 
 [[package]]
 name = "rtic-scope-frontend-dummy"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "pyo3",

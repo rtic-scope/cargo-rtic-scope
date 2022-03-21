@@ -151,7 +151,7 @@ pub fn configure(
 #[inline]
 pub fn __write_enter_id(id: u8) {
     unsafe {
-        WATCH_VARIABLE_ENTER.id = id;
+        core::ptr::write_volatile(&mut WATCH_VARIABLE_ENTER.id, id);
     }
 }
 
@@ -161,6 +161,6 @@ pub fn __write_enter_id(id: u8) {
 #[inline]
 pub fn __write_exit_id(id: u8) {
     unsafe {
-        WATCH_VARIABLE_EXIT.id = id;
+        core::ptr::write_volatile(&mut WATCH_VARIABLE_EXIT.id, id);
     }
 }

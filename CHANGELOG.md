@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 ### Changed
-- Bump `itm` which improves the denotation of quality in the downstream `api::Timestamp`: a previous `api::Timestamp { offset: 1, data_relation: TimestampDataRelation::Sync }` is now represented as `api::Timestamp::Sync(1)`.
+- `cortex-m-rtic-trace::trace`: write watch variables using `ptr::volatile_write` instead, signaling that the write should not be optimized out.
 ### Deprecated
 ### Security
+
+## [0.3.2] 2022-03-17
+Maintenance release.
+
+### Changed
+- Bump `itm` which improves the denotation of quality in the downstream `api::Timestamp`: a previous `api::Timestamp { offset: 1, data_relation: TimestampDataRelation::Sync }` is now represented as `api::Timestamp::Sync(1)`.
+- `rtic-scope-frontend-dummy`: print qualities (`good` or `bad`, abstracted above the `api::Timestamp` enum) of timestamped events.
 
 ## [0.3.1] 2022-01-19
 Mostly a maintenance release with some quality-of-life changes.

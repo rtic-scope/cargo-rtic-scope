@@ -1,6 +1,6 @@
 [package]
 name = "rtic-scope-api"
-version = "0.3.1"
+version = "0.3.2"
 authors = ["Viktor Sonesten <v@tmplt.dev>"]
 edition = "2021"
 repository = "https://github.com/rtic-scope/cargo-rtic-scope/rtic-scope-api"
@@ -8,7 +8,7 @@ description = "API used between RTIC Scope front- and backends"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-itm = { version = "0.8.0", git = "https://github.com/rtic-scope/itm.git", features = ["serde"] }
+itm = { version = "0.8.0", features = ["serde"] }
 
 [dependencies.serde]
 version = "1"
