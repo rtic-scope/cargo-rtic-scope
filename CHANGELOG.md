@@ -6,9 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- `cargo rtic-scope replay --list`: print out a non-exhaustive header describing the index and trace file name, but not the comment (#140).
 ### Changed
 - `cortex-m-rtic-trace::trace`: write watch variables using `ptr::volatile_write` instead, signaling that the write should not be optimized out.
 - `rtic-scope-frontend-dummy`: correctly report absolute timestamps as nanoseconds, not microseconds.
+- `cargo rtic-scope replay --list`: only print the trace comment if it exists (previously printed "None").
 ### Deprecated
 ### Security
 

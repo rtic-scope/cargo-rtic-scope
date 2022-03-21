@@ -809,11 +809,17 @@ async fn replay(
                         .into(),
                 ),
             )?;
+            println!("index\ttrace file");
             for (i, trace) in traces.enumerate() {
                 let metadata =
                     sources::FileSource::new(fs::OpenOptions::new().read(true).open(&trace)?)?
                         .metadata();
-                println!("{}\t{}\t{:?}", i, trace.display(), metadata.comment);
+                println!(
+                    "{}\t{}\t{}",
+                    i,
+                    trace.display(),
+                    metadata.comment.unwrap_or_else(|| "".to_string())
+                );
             }
 
             Ok(None)
