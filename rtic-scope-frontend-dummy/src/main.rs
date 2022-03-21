@@ -30,7 +30,7 @@ fn main() -> Result<()> {
             | api::Timestamp::UnknownAssocEventDelay { prev: _, curr } => ("bad!", curr.as_nanos()),
         };
         let diff = nanos - prev_nanos;
-        eprintln!("@{nanos} µs (+{diff} ns) [{quality}]: {events:?}");
+        eprintln!("@{nanos} ns (+{diff} ns) [{quality}]: {events:?}");
         prev_nanos = nanos;
     }
 

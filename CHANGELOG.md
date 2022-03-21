@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 ### Changed
 - `cortex-m-rtic-trace::trace`: write watch variables using `ptr::volatile_write` instead, signaling that the write should not be optimized out.
+- `rtic-scope-frontend-dummy`: correctly report absolute timestamps as nanoseconds, not microseconds.
 ### Deprecated
 ### Security
 
