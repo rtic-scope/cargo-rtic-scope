@@ -24,9 +24,9 @@ pub fn trace(_attrs: TokenStream, item: TokenStream) -> TokenStream {
         )
         .unwrap();
 
-        // Insert a statement at the start and end of the given function
-        // that writes the unique task ID to the respecpive watchpoint
-        // address.
+        // Wrap the task body in a closure, write the enter UTID, call
+        // the closure and save the return value, write the exit UTID,
+        // and lastly return the value returned by the closure.
         let prologue = syn::parse2::<Stmt>(quote!(
             ::cortex_m_rtic_trace::__write_enter_id(#task_id);
         ))
@@ -35,10 +35,26 @@ pub fn trace(_attrs: TokenStream, item: TokenStream) -> TokenStream {
             ::cortex_m_rtic_trace::__write_exit_id(#task_id);
         ))
         .unwrap();
-        let mut stmts = vec![prologue];
-        stmts.append(&mut fun.block.stmts);
-        stmts.push(epilogue);
-        stmts
+        let call = syn::parse2::<Stmt>(quote!(
+            let retval = closure();
+        ))
+        .unwrap();
+        let ret = syn::parse2::<Stmt>(quote!(
+            return retval;
+        ))
+        .unwrap();
+        let closure = {
+            let block_stmts = fun.block.stmts;
+            // closure must be mut for task Context to be &mut.
+            syn::parse2::<Stmt>(quote!(
+                let mut closure = || {
+                    #(#block_stmts)*
+                };
+            ))
+            .unwrap()
+        };
+
+        vec![closure, prologue, call, epilogue, ret]
     };
 
     fun.into_token_stream().into()
