@@ -432,7 +432,7 @@ fn resolve_int_nrs(
             .open(target_dir.join("Cargo.toml"))
             .map_err(RecoveryError::LibExtractFail)?;
         let dep = format!(
-            "\n{} = {{ version = \"{}\", features = [{}]}}\n",
+            "\n{} = {{ version = \"{}\", default-features = false, features = [{}]}}\n",
             pacp.pac_name,
             pacp.pac_version,
             pacp.pac_features
