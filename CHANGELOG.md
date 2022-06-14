@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cargo rtic-scope replay --list`: only print the trace comment if it exists (previously printed "None").
 ### Fixed
 - `cortex-m-rtic-trace::trace`: correctly handle tasks/functions that exit prematurely or return a value.
+- `/contrib`: update lock file; `cargo-rtic-scope` now builds again inside a `nix develop` shell.
+- Builds of PACs with default features like `device` or `rt` during recovery stage, which previously resulted in fatal linker errors.
 
 ### Deprecated
 ### Security
