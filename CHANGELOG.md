@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+### Changed
+### Fixed
+### Deprecated
+### Security
+
+## [0.3.3] 2022-06-14
+### Added
 - `cargo rtic-scope replay --list`: print out a non-exhaustive header describing the index and trace file name, but not the comment (#140).
 ### Changed
 - `cortex-m-rtic-trace::trace`: write watch variables using `ptr::volatile_write` instead, signaling that the write should not be optimized out.
