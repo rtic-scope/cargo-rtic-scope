@@ -34,8 +34,8 @@ tempfile = "3"
 cortex-m = { version = "0.7", default-features = false, features = ["serde", "std"]}
 
 # Probe support
-probe-rs = { version = "0.12", git = "https://github.com/rtic-scope/probe-rs.git", branch = "feat/swo-read" }
-probe-rs-cli-util = { version = "0.12", git = "https://github.com/rtic-scope/probe-rs.git", branch = "feat/swo-read" }
+probe-rs = "0.13"
+probe-rs-cli-util = "0.13"
 
 # TTY support
 nix = { version = "0.23", git = "https://github.com/rtic-scope/nix.git", branch = "feat/termios-linux-arbitrary" }
