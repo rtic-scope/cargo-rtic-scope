@@ -8,5 +8,4 @@
 For non-commercial purposes, the code in this repository is distributed under the terms of both the MIT license and the Apache License (Version 2.0).
 See [LICENSE-APACHE](cargo-rtic-scope/LICENSE-APACHE) and [LICENSE-MIT](cargo-rtic-scope/LICENSE-MIT) for details.
 
-This project is maintained in cooperation with [@GrepitAB](https://github.com/GrepitAB) and Luleå Technical University.
-For commercial support and alternative licensing, inquire via <contact@grepit.se>.
+For commercial support and alternative licensing, inquire via <v@tmplt.dev>.
